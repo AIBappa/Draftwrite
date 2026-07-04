@@ -1300,10 +1300,110 @@ function updateTagBadge(itemId, sectionId, val) {
   }
 }
 
-// ─── Stage 1 JSON Save ───
+// ─── Stage 1 JSON Export with Questions ───
+
+function getQuestionText(id) {
+  const allItems = [
+    ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
+    ...STAGE1_INFRASTRUCTURE_SECTION.items,
+    ...STAGE1_EXTERNAL_SECTION.items
+  ];
+  const item = allItems.find(i => i.id === id);
+  return item ? item.desc : id;
+}
+
+function getQuestionHint(id) {
+  const allItems = [
+    ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
+    ...STAGE1_INFRASTRUCTURE_SECTION.items,
+    ...STAGE1_EXTERNAL_SECTION.items
+  ];
+  const item = allItems.find(i => i.id === id);
+  return item ? (item.hint || '') : '';
+}
+
+function getQuestionType(id) {
+  const allItems = [
+    ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
+    ...STAGE1_INFRASTRUCTURE_SECTION.items,
+    ...STAGE1_EXTERNAL_SECTION.items
+  ];
+  const item = allItems.find(i => i.id === id);
+  return item ? item.type : 'unknown';
+}
 
 function buildStage1JSON() {
   const sd = stageData[1];
+  const qaSequence = [];
+  
+  const addQA = (id, answer, type) => {
+    if (type === 'statement') return;
+    const question = getQuestionText(id);
+    const hint = getQuestionHint(id);
+    const qType = getQuestionType(id);
+    qaSequence.push({
+      id: id,
+      question: question,
+      hint: hint,
+      type: qType,
+      answer: answer || ''
+    });
+  };
+
+  const addFollowUps = (followUps, parentId) => {
+    if (!followUps) return;
+    followUps.forEach(fu => {
+      const answer = sd.inputs[fu.id] || '';
+      addQA(fu.id, answer, fu.type);
+    });
+  };
+
+  // Basics section
+  addQA('D1.1', sd.inputs['D1.1'], 'manual');
+  addQA('D1.2.1', sd.inputs['D1.2.1'], 'manual');
+  addQA('D1.2.2', sd.inputs['D1.2.2'], 'manual');
+  addQA('D1.2.3.1', sd.inputs['D1.2.3.1'], 'yesno');
+  addFollowUps(STAGE1_PRD_DELIVERABLES[0].items.find(i => i.id === 'D1.2.3.1')?.followUpYes, 'D1.2.3.1');
+  addQA('D1.2.3.2', sd.inputs['D1.2.3.2'], 'yesno');
+  addFollowUps(STAGE1_PRD_DELIVERABLES[0].items.find(i => i.id === 'D1.2.3.2')?.followUpYes, 'D1.2.3.2');
+  addQA('D1.2.3.3', sd.inputs['D1.2.3.3'], 'yesno');
+  addFollowUps(STAGE1_PRD_DELIVERABLES[0].items.find(i => i.id === 'D1.2.3.3')?.followUpYes, 'D1.2.3.3');
+  addQA('D1.2.3.4', sd.inputs['D1.2.3.4'], 'manual');
+  addQA('D1.2.3.5', sd.inputs['D1.2.3.5'], 'yesno');
+  addQA('D1.2.3.6', sd.inputs['D1.2.3.6'], 'yesno');
+
+  // Github
+  addQA('D1.3', sd.inputs['D1.3'], 'yesno');
+
+  // Function count
+  addQA('D1.4.1', sd.functionCount || '', 'manual');
+
+  // Dynamic function items
+  const count = sd.functionCount || 0;
+  for (let i = 0; i < count; i++) {
+    addQA('D1.4.2.' + (i + 1), sd.functionNames[i] || '', 'manual');
+    addQA('D2.1.' + (i + 1), sd.functionSummaries[i] || '', 'manual');
+    const scope = (sd.functionScoping || [])[i] || [];
+    addQA('D2.2.' + (i + 1), scope.join(', '), 'scoping');
+  }
+
+  // Infrastructure items
+  STAGE1_INFRASTRUCTURE_SECTION.items.forEach(item => {
+    if (item.type === 'yesno') {
+      addQA(item.id, sd.inputs[item.id] || '', 'yesno');
+      addFollowUps(item.infraFollowUps, item.id);
+    }
+  });
+
+  // External linkages
+  addQA('D3.1', sd.inputs['D3.1'], 'yesno');
+  addQA('D3.2', sd.inputs['D3.2'] || [], 'checkboxes');
+
+  const extCounts = sd.externalCounts || {};
+  for (let i = 1; i <= (extCounts.bff || 0); i++) addQA('D3.3.bff_' + i, sd.inputs['D3.3.bff_' + i] || '', 'manual');
+  for (let i = 1; i <= (extCounts.perm || 0); i++) addQA('D3.4.perm_' + i, sd.inputs['D3.4.perm_' + i] || '', 'manual');
+  for (let i = 1; i <= (extCounts.imm || 0); i++) addQA('D3.5.imm_' + i, sd.inputs['D3.5.imm_' + i] || '', 'manual');
+
   const json = {
     exportedAt: new Date().toISOString(),
     productName: sd.inputs['D1.1'] || '',
@@ -1332,7 +1432,8 @@ function buildStage1JSON() {
       databaseProducts: [],
       inMemoryProducts: []
     },
-    historyLog: sd.historyLog || []
+    historyLog: sd.historyLog || [],
+    qaSequence: qaSequence
   };
 
   // Infrastructure
@@ -1350,14 +1451,14 @@ function buildStage1JSON() {
   });
 
   // External products
-  const extCounts = sd.externalCounts || {};
-  for (let i = 1; i <= (extCounts.bff || 0); i++) {
+  const extCounts2 = sd.externalCounts || {};
+  for (let i = 1; i <= (extCounts2.bff || 0); i++) {
     json.externalLinkages.bffProducts.push(sd.inputs['D3.3.' + 'bff_' + i] || '');
   }
-  for (let i = 1; i <= (extCounts.perm || 0); i++) {
+  for (let i = 1; i <= (extCounts2.perm || 0); i++) {
     json.externalLinkages.databaseProducts.push(sd.inputs['D3.4.' + 'perm_' + i] || '');
   }
-  for (let i = 1; i <= (extCounts.imm || 0); i++) {
+  for (let i = 1; i <= (extCounts2.imm || 0); i++) {
     json.externalLinkages.inMemoryProducts.push(sd.inputs['D3.5.' + 'imm_' + i] || '');
   }
 
