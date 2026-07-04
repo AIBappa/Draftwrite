@@ -21,3 +21,9 @@ saved_exports/
 #Agentic scripts folder
 /Code/AI_scripts/
 payload.json
+
+#Ignore python files
+*.pyc
+/Code/python/__pycache__/
+*.py[cod]
+*$py.class
