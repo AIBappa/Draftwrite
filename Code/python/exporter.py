@@ -42,11 +42,81 @@ def _yesno(val):
     return ""
 
 
-# ─── Stage 1 data extraction ───
+# ─── Stage 1 data extraction – dynamic tree renderer ───
 
-def _extract_stage1(sd, section_defs):
-    """Extract Stage 1 PRD data into a structured dict for document generation."""
+# Section prefixes for grouping inputs into logical sections
+_STAGE1_SECTIONS = [
+    ("D1.1", "📦 Product Basics"),
+    ("D1.2", "📦 Product Basics"),
+    ("D1.3", "📁 Repository Setup"),
+    ("D1.4", "⚙️ Functions"),
+    ("D1.5", "⚙️ Functions"),
+    ("D1.6", "🖥️ Infrastructure"),
+    ("D2", "⚙️ Functions"),
+    ("D3", "🔗 External Linkages"),
+    ("D4", "📐 Context Diagram"),
+    ("D5", "🔍 Auto-Generated Checks"),
+    ("D6", "📋 Other"),
+]
+
+
+def _get_section_for_key(key):
+    """Return the section name for a given input key based on its prefix."""
+    for prefix, section in _STAGE1_SECTIONS:
+        if key == prefix or key.startswith(prefix + "."):
+            return section
+    return "📋 Other"
+
+
+def _key_depth(key):
+    """Return the nesting depth of a dot-notation key (number of dots + 1)."""
+    return key.count(".") + 1
+
+
+def _format_value(val):
+    """Format a value for display – handle lists, booleans, multiline text."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val if v)
+    return str(val)
+
+
+def _collect_inputs_tree(inputs):
+    """Collect all non-empty input keys with values, sorted by key order, preserving depth."""
+    tree = []
+    # Sort keys in natural dot-notation order (all as strings for compatibility)
+    sorted_keys = sorted(inputs.keys(), key=lambda k: [p.zfill(20) if p.isdigit() else p for p in k.replace(".", " ").split()])
+    for key in sorted_keys:
+        val = inputs[key]
+        if val is None or val == "" or (isinstance(val, list) and not val):
+            continue
+        formatted = _format_value(val)
+        if not formatted:
+            continue
+        tree.append({
+            "key": key,
+            "value": formatted,
+            "depth": _key_depth(key),
+            "section": _get_section_for_key(key),
+        })
+    return tree
+
+
+def _extract_stage1_full(sd):
+    """
+    Extract ALL Stage 1 PRD data into a structured dict.
+    
+    Unlike the old hardcoded _extract_stage1, this dynamically walks
+    the entire inputs dict and also collects function/scoping data.
+    """
     inputs = sd.get("inputs", {})
+    
+    # Collect function data
     functions = []
     for i, name in enumerate(sd.get("functionNames", [])):
         if name and name.strip():
@@ -56,70 +126,11 @@ def _extract_stage1(sd, section_defs):
                 "summary": (sd.get("functionSummaries") or [""] * (i + 1))[i] or "",
                 "scope": (sd.get("functionScoping") or [[]] * (i + 1))[i] or [],
             })
-    ext_counts = sd.get("externalCounts", {})
-    bff_products = []
-    for i in range(1, (ext_counts.get("bff", 0) or 0) + 1):
-        v = inputs.get(f"D3.3.bff_{i}", "")
-        if v:
-            bff_products.append(v)
-    db_products = []
-    for i in range(1, (ext_counts.get("perm", 0) or 0) + 1):
-        v = inputs.get(f"D3.4.perm_{i}", "")
-        if v:
-            db_products.append(v)
-    imm_products = []
-    for i in range(1, (ext_counts.get("imm", 0) or 0) + 1):
-        v = inputs.get(f"D3.5.imm_{i}", "")
-        if v:
-            imm_products.append(v)
-
-    infrastructure = {}
-    infra_items = [
-        ("D1.6.1.1", "Public Webapp", ["D1.6.1.2", "D1.6.1.3"]),
-        ("D1.6.2.1", "Private Webapp (Admin)", ["D1.6.2.2", "D1.6.2.3"]),
-        ("D1.6.3.1", "Public Android App", ["D1.6.3.2", "D1.6.3.3"]),
-        ("D1.6.4.1", "Private Android App (Admin)", ["D1.6.4.2", "D1.6.4.3"]),
-        ("D1.6.5.1", "Public BFF", ["D1.6.5.2", "D1.6.5.3"]),
-        ("D1.6.6.1", "Private BFF", ["D1.6.6.2", "D1.6.6.3"]),
-        ("D1.6.7.1", "Permanent Database", ["D1.6.7.2", "D1.6.7.3"]),
-        ("D1.6.8.1", "Permanent DB Functions", ["D1.6.8.2", "D1.6.8.3"]),
-        ("D1.6.9.1", "In-memory / Cache Database", ["D1.6.9.2", "D1.6.9.3"]),
-        ("D1.6.10.1", "In-memory DB Functions", ["D1.6.10.2", "D1.6.10.3"]),
-    ]
-    for key, label, followups in infra_items:
-        val = inputs.get(key, "")
-        if val == "yes":
-            details = {}
-            for f_id in followups:
-                details[f_id] = _safe(inputs.get(f_id, ""))
-            infrastructure[key] = {"label": label, "details": details}
-
+    
     return {
-        "productName": _safe(inputs.get("D1.1", "")),
-        "businessPurpose": _safe(inputs.get("D1.2.1", "")),
-        "newUserWorkflow": _safe(inputs.get("D1.2.2", "")),
-        "userTypes": {
-            "readOnly": inputs.get("D1.2.3.1") == "yes",
-            "readOnlyDesc": _safe(inputs.get("D1.2.3.1a", "")),
-            "writeOnly": inputs.get("D1.2.3.2") == "yes",
-            "writeOnlyDesc": _safe(inputs.get("D1.2.3.2a", "")),
-            "premium": inputs.get("D1.2.3.3") == "yes",
-            "premiumFeatures": _safe(inputs.get("D1.2.3.3a", "")),
-            "premiumSubTypes": int(inputs.get("D1.2.3.4", "0") or "0"),
-            "adminPage": inputs.get("D1.2.3.5") == "yes",
-            "superAdminPage": inputs.get("D1.2.3.6") == "yes",
-        },
-        "github": inputs.get("D1.3") == "yes",
+        "inputs_tree": _collect_inputs_tree(inputs),
         "functionCount": sd.get("functionCount", 0),
         "functions": functions,
-        "infrastructure": infrastructure,
-        "externalLinkages": {
-            "hasExternal": inputs.get("D3.1") == "yes",
-            "interfaces": inputs.get("D3.2", []),
-            "bffProducts": bff_products,
-            "databaseProducts": db_products,
-            "inMemoryProducts": imm_products,
-        },
         "d5Results": sd.get("d5Results", ""),
         "d4ContextDiagram": sd.get("d4ContextDiagram", ""),
     }
@@ -275,8 +286,8 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
 
         # ── Stage 1 PRD: detailed structured output ──
         if is_stage1:
-            s1 = _extract_stage1(sd, None)
-            _pdf_add_stage1_sections(pdf, s1)
+            s1 = _extract_stage1_full(sd)
+            _pdf_add_stage1_dynamic(pdf, s1)
         else:
             # ── Stages 2-9: standard manual + AI deliverables ──
             manual = stage.get("manualDeliverables", [])
@@ -344,99 +355,94 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
     return pdf.output()
 
 
-def _pdf_add_stage1_sections(pdf, s1):
-    """Add Stage 1 PRD sections to the PDF."""
-    # ── Product Basics ──
-    _pdf_add_section_title(pdf, "Product Basics")
-    _pdf_add_label_value(pdf, "Product Name", s1["productName"])
-    _pdf_add_label_value(pdf, "Business Purpose", s1["businessPurpose"])
-    _pdf_add_label_value(pdf, "New User Workflow", s1["newUserWorkflow"])
-
-    # User types
-    _pdf_add_subsection(pdf, "User Types")
-    ut = s1["userTypes"]
-    _pdf_add_label_value(pdf, "Read-Only Users", "Yes" if ut["readOnly"] else "No")
-    if ut["readOnly"] and ut["readOnlyDesc"]:
-        _pdf_add_label_value(pdf, "  Description", ut["readOnlyDesc"])
-    _pdf_add_label_value(pdf, "Write-Only Users", "Yes" if ut["writeOnly"] else "No")
-    if ut["writeOnly"] and ut["writeOnlyDesc"]:
-        _pdf_add_label_value(pdf, "  Description", ut["writeOnlyDesc"])
-    _pdf_add_label_value(pdf, "Premium Users", "Yes" if ut["premium"] else "No")
-    if ut["premium"] and ut["premiumFeatures"]:
-        _pdf_add_label_value(pdf, "  Premium Features", ut["premiumFeatures"])
-    _pdf_add_label_value(pdf, "Premium Sub-Types", str(ut["premiumSubTypes"]))
-    _pdf_add_label_value(pdf, "Admin Page", "Yes" if ut["adminPage"] else "No")
-    _pdf_add_label_value(pdf, "Super-Admin Page", "Yes" if ut["superAdminPage"] else "No")
-    pdf.ln(2)
-
-    # GitHub
-    _pdf_add_section_title(pdf, "Repository Setup")
-    _pdf_add_label_value(pdf, "GitHub Repository", "Yes" if s1["github"] else "No (Local only)")
-    pdf.ln(2)
-
-    # ── Infrastructure ──
-    _pdf_add_section_title(pdf, "Infrastructure")
-    infra = s1["infrastructure"]
-    if infra:
-        for key, item in infra.items():
-            _pdf_add_subsection(pdf, item["label"])
-            for f_id, f_val in item["details"].items():
-                if f_val:
-                    _pdf_add_label_value(pdf, "", f_val)
-    else:
-        pdf.set_font("DejaVu", "I", 8)
-        pdf.set_text_color(180, 180, 180)
-        pdf.cell(0, 6, "(No infrastructure items selected)", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-
+def _pdf_add_stage1_dynamic(pdf, s1):
+    """
+    Dynamically render all Stage 1 PRD inputs as a structured hierarchy.
+    
+    Groups inputs by section (from _STAGE1_SECTIONS), then renders each
+    key-value pair with indentation proportional to its depth in the
+    dot-notation hierarchy.
+    """
+    inputs_tree = s1.get("inputs_tree", [])
+    
+    # Group by section
+    sections = {}
+    for item in inputs_tree:
+        sec = item["section"]
+        if sec not in sections:
+            sections[sec] = []
+        sections[sec].append(item)
+    
+    # Render each section
+    section_order = [s[1] for s in _STAGE1_SECTIONS] + ["📋 Other"]
+    seen_sections = set()
+    for sec_name in section_order:
+        if sec_name not in sections or sec_name in seen_sections:
+            continue
+        seen_sections.add(sec_name)
+        items = sections[sec_name]
+        
+        _pdf_add_section_title(pdf, sec_name)
+        for item in items:
+            indent = (item["depth"] - 1) * 5  # 5mm per depth level
+            depth_label = "  " * (item["depth"] - 1) + item["key"]
+            val = item["value"]
+            # For depth 1 items, use label-value layout
+            if item["depth"] <= 1:
+                _pdf_add_label_value(pdf, depth_label, val, indent=indent)
+            else:
+                # For nested items, show as indented body text
+                pdf.set_x(10 + indent)
+                pdf.set_font("DejaVu", "", 8)
+                pdf.set_text_color(80, 80, 80)
+                pdf.cell(0, 5, depth_label, new_x="LMARGIN", new_y="NEXT")
+                # Value on next line with slightly more indent
+                pdf.set_x(10 + indent + 3)
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(20, 20, 20)
+                if val:
+                    for line in val.split("\n"):
+                        pdf.set_x(10 + indent + 3)
+                        pdf.multi_cell(170 - indent, 5, line)
+                pdf.ln(1)
+        pdf.ln(2)
+    
     # ── Functions ──
-    _pdf_add_section_title(pdf, "Functions")
-    pdf.set_font("DejaVu", "", 9)
-    pdf.set_text_color(60, 60, 60)
-    pdf.cell(0, 6, f"Total functions: {s1['functionCount']}", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-    for fn in s1["functions"]:
-        _pdf_add_subsection(pdf, f"Function {fn['number']}: {fn['name']}")
-        pdf.set_x(15)
-        pdf.set_font("DejaVu", "B", 8)
+    if s1["functions"]:
+        _pdf_add_section_title(pdf, "⚙️ Functions")
+        pdf.set_font("DejaVu", "", 9)
         pdf.set_text_color(60, 60, 60)
-        pdf.cell(30, 5, "Summary:", align="L")
-        pdf.set_font("DejaVu", "", 8)
-        pdf.set_text_color(20, 20, 20)
-        pdf.multi_cell(145, 5, fn["summary"] or "(Not provided)")
-        if fn.get("scope"):
+        pdf.cell(0, 6, f"Total functions: {s1['functionCount']}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+        for fn in s1["functions"]:
+            _pdf_add_subsection(pdf, f"Function {fn['number']}: {fn['name']}")
             pdf.set_x(15)
             pdf.set_font("DejaVu", "B", 8)
             pdf.set_text_color(60, 60, 60)
-            pdf.cell(30, 5, "Scope:", align="L")
+            pdf.cell(30, 5, "Summary:", align="L")
             pdf.set_font("DejaVu", "", 8)
             pdf.set_text_color(20, 20, 20)
-            pdf.cell(0, 5, ", ".join(fn["scope"]), new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(145, 5, fn["summary"] or "(Not provided)")
+            if fn.get("scope"):
+                pdf.set_x(15)
+                pdf.set_font("DejaVu", "B", 8)
+                pdf.set_text_color(60, 60, 60)
+                pdf.cell(30, 5, "Scope:", align="L")
+                pdf.set_font("DejaVu", "", 8)
+                pdf.set_text_color(20, 20, 20)
+                pdf.cell(0, 5, ", ".join(fn["scope"]), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
         pdf.ln(2)
-
-    # ── External Linkages ──
-    _pdf_add_section_title(pdf, "External Linkages")
-    ext = s1["externalLinkages"]
-    _pdf_add_label_value(pdf, "Has External Products", "Yes" if ext["hasExternal"] else "No")
-    if ext.get("interfaces"):
-        _pdf_add_label_value(pdf, "Interfaces", ", ".join(ext["interfaces"]))
-    if ext.get("bffProducts"):
-        _pdf_add_label_value(pdf, "BFF Products", ", ".join(ext["bffProducts"]))
-    if ext.get("databaseProducts"):
-        _pdf_add_label_value(pdf, "Database Products", ", ".join(ext["databaseProducts"]))
-    if ext.get("inMemoryProducts"):
-        _pdf_add_label_value(pdf, "In-Memory Products", ", ".join(ext["inMemoryProducts"]))
-    pdf.ln(2)
-
+    
     # ── D5 Auto-Checks ──
     if s1.get("d5Results"):
-        _pdf_add_section_title(pdf, "Auto-Generated Checks (D5)")
+        _pdf_add_section_title(pdf, "🔍 Auto-Generated Checks (D5)")
         _pdf_add_body(pdf, s1["d5Results"])
         pdf.ln(2)
 
     # ── D4 Context Diagram ──
     if s1.get("d4ContextDiagram"):
-        _pdf_add_section_title(pdf, "C4 Context Diagram (D4)")
+        _pdf_add_section_title(pdf, "📐 C4 Context Diagram (D4)")
         _pdf_add_body(pdf, s1["d4ContextDiagram"])
         pdf.ln(2)
 
@@ -505,68 +511,58 @@ def _docx_add_label(doc, label, value):
     run_value.font.size = Pt(10)
 
 
-def _docx_add_stage1(doc, s1):
-    """Add Stage 1 PRD content to the DOCX."""
-    _docx_add_section(doc, "Product Basics")
-    _docx_add_label(doc, "Product Name", s1["productName"])
-    _docx_add_label(doc, "Business Purpose", s1["businessPurpose"])
-    _docx_add_label(doc, "New User Workflow", s1["newUserWorkflow"])
-
-    _docx_add_subsection(doc, "User Types")
-    ut = s1["userTypes"]
-    _docx_add_label(doc, "Read-Only Users", "Yes" if ut["readOnly"] else "No")
-    if ut["readOnly"] and ut["readOnlyDesc"]:
-        _docx_add_label(doc, "  Description", ut["readOnlyDesc"])
-    _docx_add_label(doc, "Write-Only Users", "Yes" if ut["writeOnly"] else "No")
-    if ut["writeOnly"] and ut["writeOnlyDesc"]:
-        _docx_add_label(doc, "  Description", ut["writeOnlyDesc"])
-    _docx_add_label(doc, "Premium Users", "Yes" if ut["premium"] else "No")
-    if ut["premium"] and ut["premiumFeatures"]:
-        _docx_add_label(doc, "  Premium Features", ut["premiumFeatures"])
-    _docx_add_label(doc, "Premium Sub-Types", str(ut["premiumSubTypes"]))
-    _docx_add_label(doc, "Admin Page", "Yes" if ut["adminPage"] else "No")
-    _docx_add_label(doc, "Super-Admin Page", "Yes" if ut["superAdminPage"] else "No")
-
-    _docx_add_section(doc, "Repository Setup")
-    _docx_add_label(doc, "GitHub Repository", "Yes" if s1["github"] else "No (Local only)")
-
-    _docx_add_section(doc, "Infrastructure")
-    infra = s1["infrastructure"]
-    if infra:
-        for key, item in infra.items():
-            _docx_add_subsection(doc, item["label"])
-            for f_id, f_val in item["details"].items():
-                if f_val:
-                    _docx_add_body(doc, f_val)
-    else:
-        _docx_add_body(doc, "(No infrastructure items selected)")
-
-    _docx_add_section(doc, "Functions")
-    _docx_add_body(doc, f"Total functions: {s1['functionCount']}")
-    for fn in s1["functions"]:
-        _docx_add_subsection(doc, f"Function {fn['number']}: {fn['name']}")
-        _docx_add_label(doc, "Summary", fn["summary"] or "(Not provided)")
-        if fn.get("scope"):
-            _docx_add_label(doc, "Scope", ", ".join(fn["scope"]))
-
-    _docx_add_section(doc, "External Linkages")
-    ext = s1["externalLinkages"]
-    _docx_add_label(doc, "Has External Products", "Yes" if ext["hasExternal"] else "No")
-    if ext.get("interfaces"):
-        _docx_add_label(doc, "Interfaces", ", ".join(ext["interfaces"]))
-    if ext.get("bffProducts"):
-        _docx_add_label(doc, "BFF Products", ", ".join(ext["bffProducts"]))
-    if ext.get("databaseProducts"):
-        _docx_add_label(doc, "Database Products", ", ".join(ext["databaseProducts"]))
-    if ext.get("inMemoryProducts"):
-        _docx_add_label(doc, "In-Memory Products", ", ".join(ext["inMemoryProducts"]))
-
+def _docx_add_stage1_dynamic(doc, s1):
+    """
+    Dynamically render all Stage 1 PRD inputs as a structured hierarchy in DOCX.
+    
+    Groups inputs by section, renders each key-value pair with indentation
+    proportional to depth in the dot-notation hierarchy.
+    """
+    inputs_tree = s1.get("inputs_tree", [])
+    
+    # Group by section
+    sections = {}
+    for item in inputs_tree:
+        sec = item["section"]
+        if sec not in sections:
+            sections[sec] = []
+        sections[sec].append(item)
+    
+    # Render each section
+    section_order = [s[1] for s in _STAGE1_SECTIONS] + ["📋 Other"]
+    seen_sections = set()
+    for sec_name in section_order:
+        if sec_name not in sections or sec_name in seen_sections:
+            continue
+        seen_sections.add(sec_name)
+        items = sections[sec_name]
+        
+        _docx_add_section(doc, sec_name)
+        for item in items:
+            depth_label = "  " * (item["depth"] - 1) + item["key"]
+            val = item["value"]
+            # Use label-value for all items, indented by depth
+            indent_prefix = "  " * (item["depth"] - 1)
+            _docx_add_label(doc, indent_prefix + item["key"], val)
+    
+    # ── Functions ──
+    if s1["functions"]:
+        _docx_add_section(doc, "⚙️ Functions")
+        _docx_add_body(doc, f"Total functions: {s1['functionCount']}")
+        for fn in s1["functions"]:
+            _docx_add_subsection(doc, f"Function {fn['number']}: {fn['name']}")
+            _docx_add_label(doc, "Summary", fn["summary"] or "(Not provided)")
+            if fn.get("scope"):
+                _docx_add_label(doc, "Scope", ", ".join(fn["scope"]))
+    
+    # ── D5 Auto-Checks ──
     if s1.get("d5Results"):
-        _docx_add_section(doc, "Auto-Generated Checks (D5)")
+        _docx_add_section(doc, "🔍 Auto-Generated Checks (D5)")
         _docx_add_body(doc, s1["d5Results"])
 
+    # ── D4 Context Diagram ──
     if s1.get("d4ContextDiagram"):
-        _docx_add_section(doc, "C4 Context Diagram (D4)")
+        _docx_add_section(doc, "📐 C4 Context Diagram (D4)")
         _docx_add_body(doc, s1["d4ContextDiagram"])
 
 
@@ -633,8 +629,8 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         run.font.color.rgb = RGBColor(120, 120, 120)
 
         if is_stage1:
-            s1 = _extract_stage1(sd, None)
-            _docx_add_stage1(doc, s1)
+            s1 = _extract_stage1_full(sd)
+            _docx_add_stage1_dynamic(doc, s1)
         else:
             manual = stage.get("manualDeliverables", [])
             ai = stage.get("aiDeliverables", [])
