@@ -36,9 +36,9 @@ def _safe(s, default=""):
 def _yesno(val):
     """Convert yes/no value to display string."""
     if val == "yes":
-        return "✅ Yes"
+        return "Yes"
     elif val == "no":
-        return "❌ No"
+        return "No"
     return ""
 
 
@@ -326,7 +326,7 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         if sd.get("completed"):
             pdf.set_font("Helvetica", "", 9)
             pdf.set_text_color(16, 185, 129)
-            pdf.cell(0, 6, "✓ Stage completed", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, "[Completed] Stage completed", new_x="LMARGIN", new_y="NEXT")
 
         pdf.ln(6)
 
@@ -341,7 +341,7 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
 def _pdf_add_stage1_sections(pdf, s1):
     """Add Stage 1 PRD sections to the PDF."""
     # ── Product Basics ──
-    _pdf_add_section_title(pdf, "📦 Product Basics")
+    _pdf_add_section_title(pdf, "Product Basics")
     _pdf_add_label_value(pdf, "Product Name", s1["productName"])
     _pdf_add_label_value(pdf, "Business Purpose", s1["businessPurpose"])
     _pdf_add_label_value(pdf, "New User Workflow", s1["newUserWorkflow"])
@@ -349,27 +349,27 @@ def _pdf_add_stage1_sections(pdf, s1):
     # User types
     _pdf_add_subsection(pdf, "User Types")
     ut = s1["userTypes"]
-    _pdf_add_label_value(pdf, "Read-Only Users", "✅ Yes" if ut["readOnly"] else "❌ No")
+    _pdf_add_label_value(pdf, "Read-Only Users", "Yes" if ut["readOnly"] else "No")
     if ut["readOnly"] and ut["readOnlyDesc"]:
         _pdf_add_label_value(pdf, "  Description", ut["readOnlyDesc"])
-    _pdf_add_label_value(pdf, "Write-Only Users", "✅ Yes" if ut["writeOnly"] else "❌ No")
+    _pdf_add_label_value(pdf, "Write-Only Users", "Yes" if ut["writeOnly"] else "No")
     if ut["writeOnly"] and ut["writeOnlyDesc"]:
         _pdf_add_label_value(pdf, "  Description", ut["writeOnlyDesc"])
-    _pdf_add_label_value(pdf, "Premium Users", "✅ Yes" if ut["premium"] else "❌ No")
+    _pdf_add_label_value(pdf, "Premium Users", "Yes" if ut["premium"] else "No")
     if ut["premium"] and ut["premiumFeatures"]:
         _pdf_add_label_value(pdf, "  Premium Features", ut["premiumFeatures"])
     _pdf_add_label_value(pdf, "Premium Sub-Types", str(ut["premiumSubTypes"]))
-    _pdf_add_label_value(pdf, "Admin Page", "✅ Yes" if ut["adminPage"] else "❌ No")
-    _pdf_add_label_value(pdf, "Super-Admin Page", "✅ Yes" if ut["superAdminPage"] else "❌ No")
+    _pdf_add_label_value(pdf, "Admin Page", "Yes" if ut["adminPage"] else "No")
+    _pdf_add_label_value(pdf, "Super-Admin Page", "Yes" if ut["superAdminPage"] else "No")
     pdf.ln(2)
 
     # GitHub
-    _pdf_add_section_title(pdf, "📁 Repository Setup")
-    _pdf_add_label_value(pdf, "GitHub Repository", "✅ Yes" if s1["github"] else "❌ No (Local only)")
+    _pdf_add_section_title(pdf, "Repository Setup")
+    _pdf_add_label_value(pdf, "GitHub Repository", "Yes" if s1["github"] else "No (Local only)")
     pdf.ln(2)
 
     # ── Infrastructure ──
-    _pdf_add_section_title(pdf, "🖥️ Infrastructure")
+    _pdf_add_section_title(pdf, "Infrastructure")
     infra = s1["infrastructure"]
     if infra:
         for key, item in infra.items():
@@ -384,7 +384,7 @@ def _pdf_add_stage1_sections(pdf, s1):
     pdf.ln(2)
 
     # ── Functions ──
-    _pdf_add_section_title(pdf, "⚙️ Functions")
+    _pdf_add_section_title(pdf, "Functions")
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(60, 60, 60)
     pdf.cell(0, 6, f"Total functions: {s1['functionCount']}", new_x="LMARGIN", new_y="NEXT")
@@ -409,9 +409,9 @@ def _pdf_add_stage1_sections(pdf, s1):
         pdf.ln(2)
 
     # ── External Linkages ──
-    _pdf_add_section_title(pdf, "🔗 External Linkages")
+    _pdf_add_section_title(pdf, "External Linkages")
     ext = s1["externalLinkages"]
-    _pdf_add_label_value(pdf, "Has External Products", "✅ Yes" if ext["hasExternal"] else "❌ No")
+    _pdf_add_label_value(pdf, "Has External Products", "Yes" if ext["hasExternal"] else "No")
     if ext.get("interfaces"):
         _pdf_add_label_value(pdf, "Interfaces", ", ".join(ext["interfaces"]))
     if ext.get("bffProducts"):
@@ -424,13 +424,13 @@ def _pdf_add_stage1_sections(pdf, s1):
 
     # ── D5 Auto-Checks ──
     if s1.get("d5Results"):
-        _pdf_add_section_title(pdf, "🔍 Auto-Generated Checks (D5)")
+        _pdf_add_section_title(pdf, "Auto-Generated Checks (D5)")
         _pdf_add_body(pdf, s1["d5Results"])
         pdf.ln(2)
 
     # ── D4 Context Diagram ──
     if s1.get("d4ContextDiagram"):
-        _pdf_add_section_title(pdf, "📐 C4 Context Diagram (D4)")
+        _pdf_add_section_title(pdf, "C4 Context Diagram (D4)")
         _pdf_add_body(pdf, s1["d4ContextDiagram"])
         pdf.ln(2)
 
@@ -680,7 +680,7 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         # Completed status
         if sd.get("completed"):
             p = doc.add_paragraph()
-            run = p.add_run("✓ Stage completed")
+            run = p.add_run("[COMPLETED] Stage completed")
             run.bold = True
             run.font.color.rgb = RGBColor(16, 185, 129)
 
