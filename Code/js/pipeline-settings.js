@@ -334,7 +334,14 @@ function buildExportPayload() {
 
   return {
     stageData: exportStageData,
-    pipelineDef: cleanPipeline
+    pipelineDef: cleanPipeline,
+    stage1Questions: {
+      deliverables: STAGE1_PRD_DELIVERABLES,
+      infrastructure: STAGE1_INFRASTRUCTURE_SECTION,
+      external: STAGE1_EXTERNAL_SECTION,
+      dynamicTemplates: STAGE1_DYNAMIC_TEMPLATES,
+      scopingOptions: SCOPING_OPTIONS
+    }
   };
 }
 

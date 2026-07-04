@@ -270,9 +270,10 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 data = self._read_body()
                 stage_data = data.get("stageData", {})
                 pipeline_def = data.get("pipelineDef", [])
+                stage1_q = data.get("stage1Questions", {})
                 timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
                 title = f"Pipeline Export - {timestamp}"
-                pdf_bytes = generate_pdf_bytes(stage_data, pipeline_def, title=title)
+                pdf_bytes = generate_pdf_bytes(stage_data, pipeline_def, title=title, stage1_questions=stage1_q)
                 filename = f"pipeline-export-{timestamp}.pdf"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
@@ -293,9 +294,10 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 data = self._read_body()
                 stage_data = data.get("stageData", {})
                 pipeline_def = data.get("pipelineDef", [])
+                stage1_q = data.get("stage1Questions", {})
                 timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
                 title = f"Pipeline Export - {timestamp}"
-                docx_bytes = generate_docx_bytes(stage_data, pipeline_def, title=title)
+                docx_bytes = generate_docx_bytes(stage_data, pipeline_def, title=title, stage1_questions=stage1_q)
                 filename = f"pipeline-export-{timestamp}.docx"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")

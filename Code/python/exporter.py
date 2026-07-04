@@ -227,7 +227,70 @@ def _pdf_add_table_row(pdf, cells, col_widths, bold=False, fill=False):
     pdf.ln()
 
 
-def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
+def _build_question_lookup(stage1_questions):
+    """
+    Build a dict mapping field IDs to their question text (desc).
+    Walks all section definitions from the frontend config.
+    """
+    lookup = {}
+    if not stage1_questions:
+        return lookup
+    
+    # From STAGE1_PRD_DELIVERABLES (deliverables)
+    for section in stage1_questions.get("deliverables", []):
+        for item in section.get("items", []):
+            qid = item.get("id", "")
+            desc = item.get("desc", "")
+            if qid and desc:
+                lookup[qid] = desc
+            # Follow-up questions (yes/no followUpYes)
+            for followup in item.get("followUpYes", []):
+                fid = followup.get("id", "")
+                fdesc = followup.get("desc", "")
+                if fid and fdesc:
+                    lookup[fid] = fdesc
+    
+    # From STAGE1_INFRASTRUCTURE_SECTION (infrastructure)
+    infra = stage1_questions.get("infrastructure", {})
+    for item in infra.get("items", []):
+        qid = item.get("id", "")
+        desc = item.get("desc", "")
+        if qid and desc:
+            lookup[qid] = desc
+        # Infrastructure follow-ups
+        for followup in item.get("infraFollowUps", []):
+            fid = followup.get("id", "")
+            fdesc = followup.get("desc", "")
+            if fid and fdesc:
+                lookup[fid] = fdesc
+    
+    # From STAGE1_EXTERNAL_SECTION (external)
+    ext = stage1_questions.get("external", {})
+    for item in ext.get("items", []):
+        qid = item.get("id", "")
+        desc = item.get("desc", "")
+        if qid and desc:
+            lookup[qid] = desc
+    
+    # From STAGE1_DYNAMIC_TEMPLATES (dynamic items like function names)
+    for tmpl in stage1_questions.get("dynamicTemplates", []):
+        template_str = tmpl.get("template", "")
+        desc_template = tmpl.get("desc", "")
+        # These are templates with {n} placeholders - we store the template pattern
+        if template_str and desc_template:
+            lookup[f"__template__{template_str}"] = desc_template
+    
+    return lookup
+
+
+def _get_question(lookup, key):
+    """Get the question text for a given key ID, or return the key itself if not found."""
+    if not lookup:
+        return None
+    return lookup.get(key, None)
+
+
+def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export", stage1_questions=None):
     """
     Generate a PDF as bytes from pipeline stage data.
     
@@ -284,10 +347,13 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         pdf.cell(0, 6, f"Type: {stage_type}  |  Models: {', '.join(stage.get('models', []))}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
+        # Build question lookup for Stage 1
+        question_lookup = _build_question_lookup(stage1_questions) if stage1_questions else None
+
         # ── Stage 1 PRD: detailed structured output ──
         if is_stage1:
             s1 = _extract_stage1_full(sd)
-            _pdf_add_stage1_dynamic(pdf, s1)
+            _pdf_add_stage1_dynamic(pdf, s1, question_lookup=question_lookup)
         else:
             # ── Stages 2-9: standard manual + AI deliverables ──
             manual = stage.get("manualDeliverables", [])
@@ -355,13 +421,14 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
     return pdf.output()
 
 
-def _pdf_add_stage1_dynamic(pdf, s1):
+def _pdf_add_stage1_dynamic(pdf, s1, question_lookup=None):
     """
     Dynamically render all Stage 1 PRD inputs as a structured hierarchy.
     
     Groups inputs by section (from _STAGE1_SECTIONS), then renders each
     key-value pair with indentation proportional to its depth in the
     dot-notation hierarchy.
+    If question_lookup is provided, renders the question text alongside the key ID.
     """
     inputs_tree = s1.get("inputs_tree", [])
     
@@ -385,17 +452,41 @@ def _pdf_add_stage1_dynamic(pdf, s1):
         _pdf_add_section_title(pdf, sec_name)
         for item in items:
             indent = (item["depth"] - 1) * 5  # 5mm per depth level
-            depth_label = "  " * (item["depth"] - 1) + item["key"]
+            key = item["key"]
             val = item["value"]
+            
+            # Get question text if available
+            question = _get_question(question_lookup, key) if question_lookup else None
+            
+            # Build label: key ID + question text
+            label_prefix = "  " * (item["depth"] - 1) + key
+            if question:
+                label = f"{label_prefix} — {question}"
+            else:
+                label = label_prefix
+            
             # For depth 1 items, use label-value layout
             if item["depth"] <= 1:
-                _pdf_add_label_value(pdf, depth_label, val, indent=indent)
+                pdf.set_x(10 + indent)
+                pdf.set_font("DejaVu", "B" if question else "", 9)
+                pdf.set_text_color(60, 60, 60)
+                pdf.multi_cell(180 - indent, 5, label)
+                pdf.set_x(10 + indent + 3)
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(20, 20, 20)
+                if val:
+                    for line in val.split("\n"):
+                        pdf.set_x(10 + indent + 3)
+                        pdf.multi_cell(170 - indent, 5, line)
+                else:
+                    pdf.cell(0, 5, "(No answer)")
+                pdf.ln(2)
             else:
                 # For nested items, show as indented body text
                 pdf.set_x(10 + indent)
                 pdf.set_font("DejaVu", "", 8)
                 pdf.set_text_color(80, 80, 80)
-                pdf.cell(0, 5, depth_label, new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(180 - indent, 5, label)
                 # Value on next line with slightly more indent
                 pdf.set_x(10 + indent + 3)
                 pdf.set_font("DejaVu", "", 9)
@@ -511,12 +602,13 @@ def _docx_add_label(doc, label, value):
     run_value.font.size = Pt(10)
 
 
-def _docx_add_stage1_dynamic(doc, s1):
+def _docx_add_stage1_dynamic(doc, s1, question_lookup=None):
     """
     Dynamically render all Stage 1 PRD inputs as a structured hierarchy in DOCX.
     
     Groups inputs by section, renders each key-value pair with indentation
     proportional to depth in the dot-notation hierarchy.
+    If question_lookup is provided, renders the question text alongside the key ID.
     """
     inputs_tree = s1.get("inputs_tree", [])
     
@@ -539,11 +631,20 @@ def _docx_add_stage1_dynamic(doc, s1):
         
         _docx_add_section(doc, sec_name)
         for item in items:
-            depth_label = "  " * (item["depth"] - 1) + item["key"]
+            key = item["key"]
             val = item["value"]
-            # Use label-value for all items, indented by depth
+            
+            # Get question text if available
+            question = _get_question(question_lookup, key) if question_lookup else None
+            
+            # Build label: key ID + question text
             indent_prefix = "  " * (item["depth"] - 1)
-            _docx_add_label(doc, indent_prefix + item["key"], val)
+            if question:
+                label = f"{indent_prefix}{key} — {question}"
+            else:
+                label = f"{indent_prefix}{key}"
+            
+            _docx_add_label(doc, label, val)
     
     # ── Functions ──
     if s1["functions"]:
@@ -566,7 +667,7 @@ def _docx_add_stage1_dynamic(doc, s1):
         _docx_add_body(doc, s1["d4ContextDiagram"])
 
 
-def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
+def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export", stage1_questions=None):
     """
     Generate a DOCX file as bytes from pipeline stage data.
     
@@ -616,6 +717,9 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         is_stage1 = stage.get("isStage1PRD", False)
         stage_name = stage.get("name", f"Stage {sid}")
 
+        # Build question lookup for Stage 1
+        question_lookup = _build_question_lookup(stage1_questions) if stage1_questions else None
+
         # Stage heading
         _docx_add_heading(doc, f"Stage {sid}: {stage_name}", level=1)
 
@@ -630,7 +734,7 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
 
         if is_stage1:
             s1 = _extract_stage1_full(sd)
-            _docx_add_stage1_dynamic(doc, s1)
+            _docx_add_stage1_dynamic(doc, s1, question_lookup=question_lookup)
         else:
             manual = stage.get("manualDeliverables", [])
             ai = stage.get("aiDeliverables", [])
