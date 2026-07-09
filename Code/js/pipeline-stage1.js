@@ -171,9 +171,12 @@ function saveStage1Inputs() {
       sd.inputs[id] = el.value;
     }
   });
-  // Save function count
-  const fc = document.getElementById('s1-func-count');
-  if (fc) sd.functionCount = parseInt(fc.value) || 0;
+  // Sync function count from canonical source (inputs['D1.4.1']) rather than DOM
+  // The DOM element #s1-func-count may be stale or absent in wizard mode
+  const fcVal = sd.inputs['D1.4.1'];
+  if (fcVal !== undefined && fcVal !== '') {
+    sd.functionCount = parseInt(fcVal) || 0;
+  }
   // Save function names (don't reset — preserve existing values if DOM elements aren't visible)
   document.querySelectorAll('[data-stage1-fn="name"]').forEach(el => {
     const idx = parseInt(el.dataset.idx);
@@ -187,129 +190,34 @@ function saveStage1Inputs() {
   saveToStorage();
 }
 
-// ─── Flattened Question Wizard ───
+// ─── Function Count Reconciliation ───
 
-/** Build the flattened question list */
-function buildFlatQuestionList() {
+/** Ensure sd.functionCount and sd.inputs['D1.4.1'] are in sync.
+ *  Prefers the more recently updated value (inputs['D1.4.1'] takes priority
+ *  since it's set directly by onFunctionCountChange). */
+function reconcileFunctionCount() {
   const sd = stageData[1];
-  const list = [];
-  const addItem = (id, type, desc, hint, section, src, meta = {}) => {
-    list.push({ id, type, desc, hint, section, src, meta });
-  };
-  const addStatement = (id, desc, section, src) => {
-    list.push({ id, type: 'statement', desc, section, src });
-  };
-
-  // Basics
-  const basics = STAGE1_PRD_DELIVERABLES.find(s => s.id === 'section_basics');
-  if (basics) {
-    basics.items.forEach(item => {
-      if (item.type === 'statement') addStatement(item.id, item.desc, basics.id, 'basics');
-      else if (item.type === 'manual') addItem(item.id, item.type, item.desc, item.hint, basics.id, 'basics', item);
-      else if (item.type === 'yesno') addItem(item.id, item.type, item.desc, item.hint, basics.id, 'basics', item);
-    });
-  }
-
-  // Github
-  const github = STAGE1_PRD_DELIVERABLES.find(s => s.id === 'section_github');
-  if (github) {
-    github.items.forEach(item => {
-      if (item.type === 'statement') addStatement(item.id, item.desc, github.id, 'github');
-      else if (item.type === 'yesno') addItem(item.id, item.type, item.desc, item.hint, github.id, 'github', item);
-    });
-  }
-
-  // Infrastructure
-  const infra = STAGE1_INFRASTRUCTURE_SECTION;
-  addStatement(infra.items[0].id, infra.items[0].desc, infra.id, 'infra');
-  for (let i = 1; i < infra.items.length; i++) {
-    const item = infra.items[i];
-    addItem(item.id, item.type, item.desc, item.hint, infra.id, 'infra', item);
-  }
-
-  // Functions count
-  const funcs = STAGE1_PRD_DELIVERABLES.find(s => s.id === 'section_functions');
-  if (funcs) {
-    funcs.items.forEach(item => {
-      if (item.type === 'statement') addStatement(item.id, item.desc, funcs.id, 'functions');
-      else if (item.type === 'manual' && item.isFunctionCount) {
-        addItem(item.id, 'function_count', item.desc, item.hint, funcs.id, 'functions', item);
-      }
-    });
-  }
-
-  // Dynamic function fields
-  const count = sd.functionCount || 0;
-  for (let i = 0; i < count; i++) {
-    addItem('D1.4.2.' + (i + 1), 'function_name', 'Name of function ' + (i + 1), 'Enter a short, descriptive name.', funcs.id, 'functions', { idx: i });
-    addItem('D2.1.' + (i + 1), 'function_summary', 'Function ' + (i + 1) + ' summary', 'Describe what this function does, its inputs, outputs, and who uses it.', funcs.id, 'functions', { idx: i });
-    addItem('D2.2.' + (i + 1), 'function_scoping', 'For function ' + (i + 1) + ', scope its impact', 'Tick all infrastructure components this function touches.', funcs.id, 'functions', { idx: i });
-  }
-
-  // External linkages
-  const ext = STAGE1_EXTERNAL_SECTION;
-  addStatement(ext.items[0].id, ext.items[0].desc, ext.id, 'external');
-  ext.items.forEach(item => {
-    if (item.type !== 'statement') {
-      addItem(item.id, item.type, item.desc, item.hint, ext.id, 'external', item);
+  if (!sd) return;
+  const fromInput = parseInt(sd.inputs['D1.4.1']);
+  const fromProp = parseInt(sd.functionCount);
+  if (!isNaN(fromInput) && fromInput > 0) {
+    if (fromInput !== fromProp) {
+      sd.functionCount = fromInput;
+      // Ensure arrays are sized correctly
+      while (sd.functionNames.length < fromInput) sd.functionNames.push('');
+      while (sd.functionSummaries.length < fromInput) sd.functionSummaries.push('');
+      while (sd.functionScoping.length < fromInput) sd.functionScoping.push([]);
     }
-  });
-
-  return list;
-}
-
-function buildS1FlowContext() {
-  const sd = stageData[1];
-  const count = parseInt(sd.functionCount) || 0;
-  s1FlowContext.count = count;
-  s1FlowContext.names = [];
-  s1FlowContext.summaries = [];
-  s1FlowContext.scoping = [];
-  for (let i = 0; i < count; i++) {
-    s1FlowContext.names.push(sd.functionNames[i] || '');
-    s1FlowContext.summaries.push(sd.functionSummaries[i] || '');
-    s1FlowContext.scoping.push(sd.functionScoping[i] || []);
+  } else if (!isNaN(fromProp) && fromProp > 0) {
+    sd.inputs['D1.4.1'] = String(fromProp);
   }
-}
-
-function countSectionAnswered(sectionId) {
-  const sd = stageData[1];
-  if (!sd) return [0, 0];
-  let total = 0;
-  let answered = 0;
-  const countItems = (items) => {
-    items.forEach(item => {
-      if (item.type === 'statement') return;
-      total++;
-      const val = sd.inputs[item.id];
-      if (item.type === 'yesno') {
-        if (val === 'yes' || val === 'no') answered++;
-      } else if (item.type === 'manual') {
-        if (val && val.trim()) answered++;
-      } else if (item.type === 'checkboxes') {
-        if (val && Array.isArray(val) && val.length > 0) answered++;
-      } else if (item.type === 'scoping') {
-        if (val && Array.isArray(val) && val.length > 0) answered++;
-      } else {
-        if (val && val.trim()) answered++;
-      }
-    });
-  };
-  const allSections = [STAGE1_PRD_DELIVERABLES, [STAGE1_INFRASTRUCTURE_SECTION], [STAGE1_EXTERNAL_SECTION]];
-  for (const group of allSections) {
-    for (const section of group) {
-      if (section.id === sectionId && section.items) {
-        countItems(section.items);
-      }
-    }
-  }
-  return [answered, total];
 }
 
 // ─── Main Stage 1 Renderer ───
 
 function renderStage1PRD(content) {
   const sd = stageData[1];
+  reconcileFunctionCount();
 
   if (s1ViewMode === 'full') {
     renderStage1FullView(content);
@@ -360,6 +268,7 @@ function s1SwitchView(mode) {
 /** Render full expanded document view (all accordions open, like other stages) */
 function renderStage1FullView(content) {
   const sd = stageData[1];
+  reconcileFunctionCount();
 
   // Build flattened question list to ensure data is fresh
   s1FlatQuestions = buildFlatQuestionList();
@@ -1138,6 +1047,7 @@ function onFunctionCountChange(val) {
   const tag = getManualTag('D1.4.1');
   logTag('section_functions', 'D1.4.1', tag, String(count), 'Function count set to ' + count);
   updateTagBadge('D1.4.1', 'section_functions', String(count));
+  saveToStorage();
 
   const container = document.getElementById('s1-func-instances');
   if (!container) return;

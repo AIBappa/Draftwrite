@@ -116,6 +116,17 @@ def _extract_stage1_full(sd):
     """
     inputs = sd.get("inputs", {})
     
+    # Reconcile functionCount with inputs['D1.4.1'] to avoid inconsistency
+    function_count = sd.get("functionCount", 0)
+    d141 = inputs.get("D1.4.1", "")
+    if d141 and d141.strip():
+        try:
+            from_input = int(d141)
+            if from_input != function_count and from_input > 0:
+                function_count = from_input
+        except (ValueError, TypeError):
+            pass
+    
     # Collect function data
     functions = []
     for i, name in enumerate(sd.get("functionNames", [])):
@@ -129,7 +140,7 @@ def _extract_stage1_full(sd):
     
     return {
         "inputs_tree": _collect_inputs_tree(inputs),
-        "functionCount": sd.get("functionCount", 0),
+        "functionCount": function_count,
         "functions": functions,
         "d5Results": sd.get("d5Results", ""),
         "d4ContextDiagram": sd.get("d4ContextDiagram", ""),
