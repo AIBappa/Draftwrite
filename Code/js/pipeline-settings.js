@@ -84,6 +84,27 @@ function getStageModels(stage) {
   return sd ? (sd.modelOverride || stage.models) : stage.models;
 }
 
+function getActiveModel() {
+  switch(CONFIG.mode) {
+    case 'local': return CONFIG.ollamaModel || 'default (per-stage)';
+    case 'cloud': return CONFIG.cloudModel;
+    case 'openai': return CONFIG.openaiModel;
+    case 'gemini': return CONFIG.geminiModel;
+    case 'azure': return CONFIG.azureModel;
+    case 'groq': return CONFIG.groqModel;
+    case 'cerebras': return CONFIG.cerebrasModel;
+    case 'openrouter': return CONFIG.openrouterModel;
+    case 'nvidia': return CONFIG.nvidiaModel;
+    case 'siliconflow': return CONFIG.siliconflowModel;
+    default: return '—';
+  }
+}
+
+function updateTopbarModel() {
+  const el = document.getElementById('topbar-models-text');
+  if (el) el.textContent = getActiveModel();
+}
+
 function stageModelsLabel(stage) {
   const m = getStageModels(stage);
   return m.filter(Boolean).join(' · ');
@@ -760,6 +781,7 @@ function saveSetup() {
 
   closeSetup();
   if (typeof updateSetupIndicator === 'function') updateSetupIndicator();
+  updateTopbarModel();
   saveToStorage();
   showToast(getProviderLabel() + ' mode active');
 }

@@ -53,8 +53,7 @@ function renderStage() {
   }
   const title = document.getElementById('topbar-title');
   if (title) title.textContent = stage.name;
-  const modelsText = document.getElementById('topbar-models-text');
-  if (modelsText) modelsText.textContent = stageModelsLabel(stage);
+  updateTopbarModel();
 
   // Check for stage-specific custom renderer
   if (typeof renderStageCustom === 'function') {
