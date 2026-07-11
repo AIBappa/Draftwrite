@@ -1212,33 +1212,37 @@ function updateTagBadge(itemId, sectionId, val) {
 
 // ─── Stage 1 JSON Export with Questions ───
 
-function getQuestionText(id) {
-  const allItems = [
+function getAllStage1Items() {
+  const items = [
     ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
     ...STAGE1_INFRASTRUCTURE_SECTION.items,
     ...STAGE1_EXTERNAL_SECTION.items
   ];
-  const item = allItems.find(i => i.id === id);
+  // Also collect nested follow-up items from followUpYes and infraFollowUps
+  const nested = [];
+  for (const item of items) {
+    for (const fu of (item.followUpYes || [])) {
+      nested.push(fu);
+    }
+    for (const fu of (item.infraFollowUps || [])) {
+      nested.push(fu);
+    }
+  }
+  return [...items, ...nested];
+}
+
+function getQuestionText(id) {
+  const item = getAllStage1Items().find(i => i.id === id);
   return item ? item.desc : id;
 }
 
 function getQuestionHint(id) {
-  const allItems = [
-    ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
-    ...STAGE1_INFRASTRUCTURE_SECTION.items,
-    ...STAGE1_EXTERNAL_SECTION.items
-  ];
-  const item = allItems.find(i => i.id === id);
+  const item = getAllStage1Items().find(i => i.id === id);
   return item ? (item.hint || '') : '';
 }
 
 function getQuestionType(id) {
-  const allItems = [
-    ...STAGE1_PRD_DELIVERABLES.flatMap(s => s.items),
-    ...STAGE1_INFRASTRUCTURE_SECTION.items,
-    ...STAGE1_EXTERNAL_SECTION.items
-  ];
-  const item = allItems.find(i => i.id === id);
+  const item = getAllStage1Items().find(i => i.id === id);
   return item ? item.type : 'unknown';
 }
 
@@ -1291,8 +1295,8 @@ function buildStage1JSON() {
   // Dynamic function items
   const count = sd.functionCount || 0;
   for (let i = 0; i < count; i++) {
-    addQA('D1.4.2.' + (i + 1), sd.functionNames[i] || '', 'manual');
-    addQA('D2.1.' + (i + 1), sd.functionSummaries[i] || '', 'manual');
+    addQA('D1.4.2.' + (i + 1), (sd.functionNames || [])[i] || '', 'manual');
+    addQA('D2.1.' + (i + 1), (sd.functionSummaries || [])[i] || '', 'manual');
     const scope = (sd.functionScoping || [])[i] || [];
     addQA('D2.2.' + (i + 1), scope.join(', '), 'scoping');
   }

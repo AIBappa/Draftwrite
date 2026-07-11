@@ -1,57 +1,13 @@
 #!/usr/bin/env python3
 """Test the _build_question_lookup function with actual frontend structure."""
 import json
+import sys
+import os
 
-# Define the function inline to test
-def _build_question_lookup(stage1_questions):
-    lookup = {}
-    if not stage1_questions:
-        return lookup
-    
-    # From STAGE1_PRD_DELIVERABLES (deliverables)
-    for section in stage1_questions.get("deliverables", []):
-        for item in section.get("items", []):
-            qid = item.get("id", "")
-            desc = item.get("desc", "")
-            if qid and desc:
-                lookup[qid] = desc
-            # Follow-up questions (yes/no followUpYes)
-            for followup in item.get("followUpYes", []):
-                fid = followup.get("id", "")
-                fdesc = followup.get("desc", "")
-                if fid and fdesc:
-                    lookup[fid] = fdesc
-    
-    # From STAGE1_INFRASTRUCTURE_SECTION (infrastructure)
-    infra = stage1_questions.get("infrastructure", {})
-    for item in infra.get("items", []):
-        qid = item.get("id", "")
-        desc = item.get("desc", "")
-        if qid and desc:
-            lookup[qid] = desc
-        # Infrastructure follow-ups
-        for followup in item.get("infraFollowUps", []):
-            fid = followup.get("id", "")
-            fdesc = followup.get("desc", "")
-            if fid and fdesc:
-                lookup[fid] = fdesc
-    
-    # From STAGE1_EXTERNAL_SECTION (external)
-    ext = stage1_questions.get("external", {})
-    for item in ext.get("items", []):
-        qid = item.get("id", "")
-        desc = item.get("desc", "")
-        if qid and desc:
-            lookup[qid] = desc
-    
-    # From STAGE1_DYNAMIC_TEMPLATES (dynamic items like function names)
-    for tmpl in stage1_questions.get("dynamicTemplates", []):
-        template_str = tmpl.get("template", "")
-        desc_template = tmpl.get("desc", "")
-        if template_str and desc_template:
-            lookup[f"__template__{template_str}"] = desc_template
-    
-    return lookup
+# Add parent directory so we can import exporter.py
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from exporter import _build_question_lookup
 
 # Simulate the actual frontend structure
 test_questions = {
@@ -95,3 +51,18 @@ print("\nChecking expected keys:")
 for k in expected_keys:
     status = "FOUND" if k in lookup else "MISSING"
     print(f"  {k}: {status}")
+
+# Real pytest assertions
+assert lookup is not None, "Lookup should not be None"
+for k in expected_keys:
+    assert k in lookup, f"Expected key '{k}' missing from lookup"
+
+# Verify specific descriptions
+assert lookup['D1.1'] == 'Product name', f"Expected 'Product name', got '{lookup.get('D1.1')}'"
+assert lookup['D1.2.3.1a'] == 'Describe what read-only users will see and do.', \
+    f"Follow-up description mismatch: '{lookup.get('D1.2.3.1a')}'"
+
+# Verify template key is stored (but not directly resolvable via exact match)
+assert '__template__D1.4.2.{n}' in lookup, "Template key should be stored"
+
+print("\n✅ All assertions passed!")
