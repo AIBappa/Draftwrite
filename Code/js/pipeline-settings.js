@@ -5,6 +5,7 @@
 const CONFIG = {
   mode: 'cloud',
   ollamaUrl: 'http://localhost:11434',
+  ollamaModel: '',
   apiKey: '',
   cloudModel: 'claude-sonnet-4-6',
   openaiKey: '',
@@ -566,6 +567,7 @@ function openSetup() {
     'gemini-key-input': CONFIG.geminiKey,
     'azure-key-input': CONFIG.azureKey,
     'ollama-url': CONFIG.ollamaUrl,
+    'ollama-model-input': CONFIG.ollamaModel,
     'cloud-model-input': CONFIG.cloudModel,
     'openai-model-input': CONFIG.openaiModel,
     'gemini-model-input': CONFIG.geminiModel,
@@ -673,6 +675,7 @@ function closeSetup() {
 function saveSetup() {
   CONFIG.mode = activeSetupTab;
   CONFIG.ollamaUrl = (document.getElementById('ollama-url')?.value || '').trim().replace(/\/$/, '');
+  CONFIG.ollamaModel = (document.getElementById('ollama-model-input')?.value || '').trim();
   CONFIG.apiKey = (document.getElementById('api-key-input')?.value || '').trim();
   CONFIG.cloudModel = document.getElementById('cloud-model-input')?.value || CONFIG.cloudModel;
   CONFIG.openaiKey = (document.getElementById('openai-key-input')?.value || '').trim();

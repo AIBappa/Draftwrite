@@ -125,9 +125,11 @@ async function callAzure(system, user) {
 }
 
 async function callOllama(system, user, model) {
+  // Use global ollamaModel from settings if set, otherwise use the passed model
+  const effectiveModel = (CONFIG.ollamaModel || '').trim() || model;
   const adv = getAdvancedBody('local');
   const body = {
-    model: model,
+    model: effectiveModel,
     stream: adv.stream || false,
     messages: [
       { role: 'system', content: system },
@@ -150,8 +152,16 @@ async function callOllama(system, user, model) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || 'Ollama error');
+  let data;
+  try {
+    data = await r.json();
+  } catch (parseErr) {
+    // Server returned non-JSON (e.g. HTML error page) — try to get text
+    let textBody = '';
+    try { textBody = await r.text(); } catch(e) {}
+    throw new Error(`Ollama returned ${r.status}: ${textBody.substring(0, 500)}`);
+  }
+  if (!r.ok) throw new Error(data.error || `Ollama error (${r.status})`);
   return data.message?.content || '';
 }
 
