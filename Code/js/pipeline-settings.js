@@ -777,6 +777,27 @@ function setConnectionStatus(provider, status, message) {
   saveToStorage();
 }
 
+async function refreshOllamaModels() {
+  const url = (document.getElementById('ollama-url')?.value || '').trim().replace(/\/$/, '');
+  const datalist = document.getElementById('ollama-model-list');
+  if (!datalist) return;
+  try {
+    const r = await fetch(url + '/api/tags', { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const models = d.models || [];
+    datalist.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.name;
+      datalist.appendChild(opt);
+    });
+    showToast('🔄 Loaded ' + models.length + ' models from Ollama');
+  } catch(e) {
+    showToast('❌ Could not fetch models: ' + e.message);
+  }
+}
+
 async function testOllama() {
   const url = (document.getElementById('ollama-url')?.value || '').trim().replace(/\/$/, '');
   const el = document.getElementById('ollama-test-result');
