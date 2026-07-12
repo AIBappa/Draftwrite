@@ -71,7 +71,7 @@ Build and run the Docker image on your local machine:
 
 The `-v` flags mount persistent directories so your data survives container restarts:
 - `sessions/` — pipeline session JSON files and `config.json`
-- `saved_exports/` — JSON/CSV exports from the pipeline
+- `saved_exports/` — mounted to `/app/exports` inside the container; stores JSON/CSV exports from the pipeline
 - `keys/` — API key files and optional `model_names.json` for auto-loading provider settings on startup
 
 ### Option 3: Access from Phone via Cloudflare Tunnel

@@ -21,7 +21,9 @@ Code/sessions/*
 Code/saved_exports/*
 
 # Allow .gitkeep files to be tracked
-!.gitkeep
+sessions/.gitkeep
+saved_exports/.gitkeep
+keys/.gitkeep
 
 #Agentic scripts folder
 /Code/AI_scripts/
