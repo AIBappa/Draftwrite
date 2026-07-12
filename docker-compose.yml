@@ -7,10 +7,15 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      # 👇 1. Tell NiceGUI to actively watch for file changes
+      - NICEGUI_RELOAD=true
     volumes:
       - saved_exports:/app/exports
       - sessions:/app/sessions
       - keys:/app/keys
+      # 👇 2. Mirror your laptop's Code folder directly into the container
+      - ./Code/python:/app/Code/python
     restart: always
 
 volumes:

@@ -256,5 +256,5 @@ def _go_to_stage(stage_id: int):
         STATE.s1_flat_questions = []
     STATE.current_stage = stage_id
     _rebuild_content()
-    ui.navigate.refresh()
+    ui.navigate.reload()
     show_toast(f"Stage {stage_id}", "info")
