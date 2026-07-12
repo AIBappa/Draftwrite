@@ -15,8 +15,12 @@ Thumbs.db
 # Sessions folder
 sessions/
 
-# Saved exports folder
+# Exports folder
+exports/
 saved_exports/
+
+# Keys folder
+keys/
 
 #Agentic scripts folder
 /Code/AI_scripts/

@@ -49,11 +49,19 @@ Build and run the Docker image on your local machine:
 
 2. **Run the container**:
     ```
-    docker run -p 8080:8080 -v $(pwd)/sessions:/app/sessions pipeline-author
+    docker run -p 8080:8080 \
+      -v $(pwd)/sessions:/app/sessions \
+      -v $(pwd)/saved_exports:/app/exports \
+      -v $(pwd)/keys:/app/keys \
+      pipeline-author
     ```
     On Windows PowerShell:
     ```
-    docker run -p 8080:8080 -v "${PWD}/sessions:/app/sessions" pipeline-author
+    docker run -p 8080:8080 `
+      -v "${PWD}/sessions:/app/sessions" `
+      -v "${PWD}/saved_exports:/app/exports" `
+      -v "${PWD}/keys:/app/keys" `
+      pipeline-author
     ```
 
 3. **Open the app**:
@@ -61,7 +69,10 @@ Build and run the Docker image on your local machine:
     http://localhost:8080/
     ```
 
-The `-v` flag mounts the `sessions` directory so your data persists between container restarts.
+The `-v` flags mount persistent directories so your data survives container restarts:
+- `sessions/` — pipeline session JSON files and `config.json`
+- `saved_exports/` — JSON/CSV exports from the pipeline
+- `keys/` — API key files and optional `model_names.json` for auto-loading provider settings on startup
 
 ### Option 3: Access from Phone via Cloudflare Tunnel
 

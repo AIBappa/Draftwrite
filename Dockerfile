@@ -32,10 +32,8 @@ WORKDIR /app
 COPY requirements.txt .
 COPY Code/python/ ./Code/python/
 COPY launcher.py .
-COPY sessions/ ./sessions/ 2>/dev/null || true
-
-# Create sessions directory if it doesn't exist
-RUN mkdir -p /app/sessions /app/exports
+# Create required directories (mounted at runtime with -v)
+RUN mkdir -p /app/sessions /app/exports /app/keys
 
 # Expose port for Coolify
 EXPOSE 8080
