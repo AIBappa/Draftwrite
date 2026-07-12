@@ -984,7 +984,7 @@ def esc_html(s) -> str:
             .replace("&", "&")
             .replace("<", "<")
             .replace(">", ">")
-            .replace('"', """))
+            .replace('"', "&#34;"))
 
 
 def show_toast(msg: str, color: str = "info"):
