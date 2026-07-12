@@ -15,7 +15,6 @@ from .config import BASE_DIR, CONFIG
 from .state import STATE
 from .exporters import export_pipeline_json
 from .ui.shell import build_ui
-from .ui.stage1 import generate_ai_output
 from .ui.stages import render_generic_stage
 from .ui.components import (
     _test_ollama, _test_anthropic, _test_openai, _test_gemini,
