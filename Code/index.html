@@ -56,6 +56,12 @@ ollama pull phi3:mini</div>
         <h3>Step 4 — Configure</h3>
         <label class="setup-label">Ollama API base URL</label>
         <input class="setup-input" id="ollama-url" type="text" value="http://localhost:11434" placeholder="http://localhost:11434" />
+        <label class="setup-label" style="margin-top:12px;">Default Ollama model (overrides per-stage defaults)</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="setup-input" id="ollama-model-input" type="text" list="ollama-model-list" placeholder="e.g. gemma3:4b or any model name" style="font-family:var(--mono);flex:1;" />
+          <button class="btn" onclick="refreshOllamaModels()" style="font-size:11px;padding:6px 10px;white-space:nowrap;" title="Fetch model list from Ollama">🔄 Refresh</button>
+        </div>
+        <datalist id="ollama-model-list"></datalist>
         <div style="display:flex;gap:10px;align-items:center;margin-top:12px;">
           <button class="btn btn-primary" onclick="testOllama()" style="font-size:12px;padding:7px 14px;">Test Ollama connection</button>
           <span id="local-status-dot" style="font-size:14px;">⚫</span>
@@ -700,9 +706,8 @@ ollama pull phi3:mini</div>
     <h2 id="topbar-title">Product Requirements Document (PRD)</h2>
     <button id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
     <button id="view-mode-toggle" onclick="toggleGlobalViewMode()" title="Toggle between wizard and full document view" style="font-size:12px;padding:5px 10px;">📄 Full View</button>
-    <div id="topbar-models" onclick="openModelModal()" title="Click to change models for this stage">
-      <span id="topbar-models-text">deepseek-r1:7b · gemma3:4b</span>
-      <span class="edit-icon">✏️</span>
+    <div id="topbar-models" title="Model from Connection Setup">
+      <span id="topbar-models-text">—</span>
     </div>
     <button class="btn" onclick="toggleHistory()">📋 History</button>
   </div>

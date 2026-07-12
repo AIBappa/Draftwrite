@@ -36,90 +36,133 @@ def _safe(s, default=""):
 def _yesno(val):
     """Convert yes/no value to display string."""
     if val == "yes":
-        return "✅ Yes"
+        return "Yes"
     elif val == "no":
-        return "❌ No"
+        return "No"
     return ""
 
 
-# ─── Stage 1 data extraction ───
+# ─── Stage 1 data extraction – dynamic tree renderer ───
 
-def _extract_stage1(sd, section_defs):
-    """Extract Stage 1 PRD data into a structured dict for document generation."""
+# Section prefixes for grouping inputs into logical sections
+_STAGE1_SECTIONS = [
+    ("D1.1", "📦 Product Basics"),
+    ("D1.2", "📦 Product Basics"),
+    ("D1.3", "📁 Repository Setup"),
+    ("D1.4", "⚙️ Functions"),
+    ("D1.5", "⚙️ Functions"),
+    ("D1.6", "🖥️ Infrastructure"),
+    ("D2", "⚙️ Functions"),
+    ("D3", "🔗 External Linkages"),
+    ("D4", "📐 Context Diagram"),
+    ("D5", "🔍 Auto-Generated Checks"),
+    ("D6", "📋 Other"),
+]
+
+
+def _get_section_for_key(key):
+    """Return the section name for a given input key based on its prefix."""
+    for prefix, section in _STAGE1_SECTIONS:
+        if key == prefix or key.startswith(prefix + "."):
+            return section
+    return "📋 Other"
+
+
+def _key_depth(key):
+    """Return the nesting depth of a dot-notation key (number of dots + 1)."""
+    return key.count(".") + 1
+
+
+def _relative_depth(key):
+    """
+    Return the depth of a key relative to its Stage 1 section prefix.
+    For example, 'D1.1' has section prefix 'D1' so relative depth = 1,
+    'D1.2.3.1' has section prefix 'D1' so relative depth = 3.
+    This ensures true top-level fields get depth 1 for the prominent layout.
+    """
+    # Find the section prefix (e.g., "D1", "D2", "D3")
+    for prefix, _ in _STAGE1_SECTIONS:
+        if key == prefix or key.startswith(prefix + "."):
+            # Count dots after the prefix
+            suffix = key[len(prefix):]
+            if not suffix:
+                return 1
+            return suffix.count(".") + 1
+    return _key_depth(key)
+
+
+def _format_value(val):
+    """Format a value for display – handle lists, booleans, multiline text."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "Yes" if val else "No"
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val if v)
+    return str(val)
+
+
+def _collect_inputs_tree(inputs):
+    """Collect all non-empty input keys with values, sorted by key order, preserving depth."""
+    tree = []
+    # Sort keys in natural dot-notation order (all as strings for compatibility)
+    sorted_keys = sorted(inputs.keys(), key=lambda k: [p.zfill(20) if p.isdigit() else p for p in k.replace(".", " ").split()])
+    for key in sorted_keys:
+        val = inputs[key]
+        if val is None or val == "" or (isinstance(val, list) and not val):
+            continue
+        formatted = _format_value(val)
+        if not formatted:
+            continue
+        tree.append({
+            "key": key,
+            "value": formatted,
+            "depth": _relative_depth(key),
+            "section": _get_section_for_key(key),
+        })
+    return tree
+
+
+def _extract_stage1_full(sd):
+    """
+    Extract ALL Stage 1 PRD data into a structured dict.
+    
+    Unlike the old hardcoded _extract_stage1, this dynamically walks
+    the entire inputs dict and also collects function/scoping data.
+    """
     inputs = sd.get("inputs", {})
+    
+    # Reconcile functionCount with inputs['D1.4.1'] to avoid inconsistency
+    function_count = sd.get("functionCount", 0)
+    d141 = inputs.get("D1.4.1", "")
+    if d141 and d141.strip():
+        try:
+            from_input = int(d141)
+            if from_input != function_count and from_input > 0:
+                function_count = from_input
+        except (ValueError, TypeError):
+            pass
+    
+    # Collect function data
     functions = []
-    for i, name in enumerate(sd.get("functionNames", [])):
+    fn_names = sd.get("functionNames", [])
+    fn_summaries = sd.get("functionSummaries", [])
+    fn_scoping = sd.get("functionScoping", [])
+    for i, name in enumerate(fn_names):
         if name and name.strip():
             functions.append({
                 "number": i + 1,
                 "name": name,
-                "summary": (sd.get("functionSummaries") or [""] * (i + 1))[i] or "",
-                "scope": (sd.get("functionScoping") or [[]] * (i + 1))[i] or [],
+                "summary": fn_summaries[i] if i < len(fn_summaries) else "",
+                "scope": fn_scoping[i] if i < len(fn_scoping) else [],
             })
-    ext_counts = sd.get("externalCounts", {})
-    bff_products = []
-    for i in range(1, (ext_counts.get("bff", 0) or 0) + 1):
-        v = inputs.get(f"D3.3.bff_{i}", "")
-        if v:
-            bff_products.append(v)
-    db_products = []
-    for i in range(1, (ext_counts.get("perm", 0) or 0) + 1):
-        v = inputs.get(f"D3.4.perm_{i}", "")
-        if v:
-            db_products.append(v)
-    imm_products = []
-    for i in range(1, (ext_counts.get("imm", 0) or 0) + 1):
-        v = inputs.get(f"D3.5.imm_{i}", "")
-        if v:
-            imm_products.append(v)
-
-    infrastructure = {}
-    infra_items = [
-        ("D1.6.1.1", "Public Webapp", ["D1.6.1.2", "D1.6.1.3"]),
-        ("D1.6.2.1", "Private Webapp (Admin)", ["D1.6.2.2", "D1.6.2.3"]),
-        ("D1.6.3.1", "Public Android App", ["D1.6.3.2", "D1.6.3.3"]),
-        ("D1.6.4.1", "Private Android App (Admin)", ["D1.6.4.2", "D1.6.4.3"]),
-        ("D1.6.5.1", "Public BFF", ["D1.6.5.2", "D1.6.5.3"]),
-        ("D1.6.6.1", "Private BFF", ["D1.6.6.2", "D1.6.6.3"]),
-        ("D1.6.7.1", "Permanent Database", ["D1.6.7.2", "D1.6.7.3"]),
-        ("D1.6.8.1", "Permanent DB Functions", ["D1.6.8.2", "D1.6.8.3"]),
-        ("D1.6.9.1", "In-memory / Cache Database", ["D1.6.9.2", "D1.6.9.3"]),
-        ("D1.6.10.1", "In-memory DB Functions", ["D1.6.10.2", "D1.6.10.3"]),
-    ]
-    for key, label, followups in infra_items:
-        val = inputs.get(key, "")
-        if val == "yes":
-            details = {}
-            for f_id in followups:
-                details[f_id] = _safe(inputs.get(f_id, ""))
-            infrastructure[key] = {"label": label, "details": details}
-
+    
     return {
-        "productName": _safe(inputs.get("D1.1", "")),
-        "businessPurpose": _safe(inputs.get("D1.2.1", "")),
-        "newUserWorkflow": _safe(inputs.get("D1.2.2", "")),
-        "userTypes": {
-            "readOnly": inputs.get("D1.2.3.1") == "yes",
-            "readOnlyDesc": _safe(inputs.get("D1.2.3.1a", "")),
-            "writeOnly": inputs.get("D1.2.3.2") == "yes",
-            "writeOnlyDesc": _safe(inputs.get("D1.2.3.2a", "")),
-            "premium": inputs.get("D1.2.3.3") == "yes",
-            "premiumFeatures": _safe(inputs.get("D1.2.3.3a", "")),
-            "premiumSubTypes": int(inputs.get("D1.2.3.4", "0") or "0"),
-            "adminPage": inputs.get("D1.2.3.5") == "yes",
-            "superAdminPage": inputs.get("D1.2.3.6") == "yes",
-        },
-        "github": inputs.get("D1.3") == "yes",
-        "functionCount": sd.get("functionCount", 0),
+        "inputs_tree": _collect_inputs_tree(inputs),
+        "functionCount": function_count,
         "functions": functions,
-        "infrastructure": infrastructure,
-        "externalLinkages": {
-            "hasExternal": inputs.get("D3.1") == "yes",
-            "interfaces": inputs.get("D3.2", []),
-            "bffProducts": bff_products,
-            "databaseProducts": db_products,
-            "inMemoryProducts": imm_products,
-        },
         "d5Results": sd.get("d5Results", ""),
         "d4ContextDiagram": sd.get("d4ContextDiagram", ""),
     }
@@ -134,10 +177,36 @@ class PipelinePDF(FPDF):
         super().__init__()
         self.pipeline_title = title
         self.set_auto_page_break(auto=True, margin=20)
+        # Register Unicode-capable DejaVu fonts with cross-platform fallback
+        _font_dir = self._resolve_font_dir()
+        self.add_font('DejaVu', '', os.path.join(_font_dir, 'DejaVuSans.ttf'))
+        self.add_font('DejaVu', 'B', os.path.join(_font_dir, 'DejaVuSans-Bold.ttf'))
+        self.add_font('DejaVu', 'I', os.path.join(_font_dir, 'DejaVuSans-Oblique.ttf'))
+        self.add_font('DejaVu', 'BI', os.path.join(_font_dir, 'DejaVuSans-BoldOblique.ttf'))
+
+    @staticmethod
+    def _resolve_font_dir():
+        """Resolve a valid DejaVu font directory for the current platform."""
+        candidates = [
+            "C:/Windows/Fonts",
+            "/usr/share/fonts/truetype/dejavu",
+            "/usr/share/fonts/dejavu",
+            "/System/Library/Fonts",
+        ]
+        for d in candidates:
+            if os.path.isdir(d) and os.path.isfile(os.path.join(d, 'DejaVuSans.ttf')):
+                return d
+        # Fallback: try to find DejaVuSans.ttf anywhere in common font paths
+        for root in ["/usr/share/fonts", "/usr/local/share/fonts"]:
+            for dirpath, _, filenames in os.walk(root):
+                if 'DejaVuSans.ttf' in filenames:
+                    return dirpath
+        # Last resort: return Windows path (will fail gracefully if not found)
+        return "C:/Windows/Fonts"
 
     def header(self):
         if self.page_no() > 1:
-            self.set_font("Helvetica", "I", 8)
+            self.set_font("DejaVu", "I", 8)
             self.set_text_color(120, 120, 120)
             self.cell(
                 0, 8, self.pipeline_title, align="L"
@@ -151,13 +220,13 @@ class PipelinePDF(FPDF):
     def footer(self):
         if self.page_no() > 1:
             self.set_y(-15)
-            self.set_font("Helvetica", "I", 7)
+            self.set_font("DejaVu", "I", 7)
             self.set_text_color(160, 160, 160)
-            self.cell(0, 10, f"Generated by Pipeline Author", align="C")
+            self.cell(0, 10, "Generated by Pipeline Author", align="C")
 
 
 def _pdf_add_section_title(pdf, title):
-    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_font("DejaVu", "B", 14)
     pdf.set_text_color(30, 27, 58)
     pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
     pdf.set_draw_color(99, 102, 241)
@@ -166,7 +235,7 @@ def _pdf_add_section_title(pdf, title):
 
 
 def _pdf_add_subsection(pdf, title):
-    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_font("DejaVu", "B", 11)
     pdf.set_text_color(75, 70, 112)
     pdf.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(1)
@@ -175,10 +244,10 @@ def _pdf_add_subsection(pdf, title):
 def _pdf_add_label_value(pdf, label, value, indent=0):
     x = 10 + indent
     pdf.set_x(x)
-    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_font("DejaVu", "B", 9)
     pdf.set_text_color(60, 60, 60)
     pdf.cell(50, 6, label, align="L")
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(20, 20, 20)
     if value:
         # Handle multi-line values
@@ -192,7 +261,7 @@ def _pdf_add_label_value(pdf, label, value, indent=0):
 
 def _pdf_add_body(pdf, text, indent=0):
     pdf.set_x(10 + indent)
-    pdf.set_font("Helvetica", "", 9)
+    pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(20, 20, 20)
     for line in text.split("\n"):
         pdf.set_x(10 + indent)
@@ -202,7 +271,7 @@ def _pdf_add_body(pdf, text, indent=0):
 
 def _pdf_add_table_row(pdf, cells, col_widths, bold=False, fill=False):
     """Add a single row to a table with given column widths."""
-    pdf.set_font("Helvetica", "B" if bold else "", 8)
+    pdf.set_font("DejaVu", "B" if bold else "", 8)
     if fill:
         pdf.set_fill_color(240, 240, 255)
     for i, cell in enumerate(cells):
@@ -210,7 +279,93 @@ def _pdf_add_table_row(pdf, cells, col_widths, bold=False, fill=False):
     pdf.ln()
 
 
-def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
+def _build_question_lookup(stage1_questions):
+    """
+    Build a dict mapping field IDs to their question text (desc).
+    Walks all section definitions from the frontend config.
+    """
+    lookup = {}
+    if not stage1_questions:
+        return lookup
+    
+    # From STAGE1_PRD_DELIVERABLES (deliverables)
+    for section in stage1_questions.get("deliverables", []):
+        for item in section.get("items", []):
+            qid = item.get("id", "")
+            desc = item.get("desc", "")
+            if qid and desc:
+                lookup[qid] = desc
+            # Follow-up questions (yes/no followUpYes)
+            for followup in item.get("followUpYes", []):
+                fid = followup.get("id", "")
+                fdesc = followup.get("desc", "")
+                if fid and fdesc:
+                    lookup[fid] = fdesc
+    
+    # From STAGE1_INFRASTRUCTURE_SECTION (infrastructure)
+    infra = stage1_questions.get("infrastructure", {})
+    for item in infra.get("items", []):
+        qid = item.get("id", "")
+        desc = item.get("desc", "")
+        if qid and desc:
+            lookup[qid] = desc
+        # Infrastructure follow-ups
+        for followup in item.get("infraFollowUps", []):
+            fid = followup.get("id", "")
+            fdesc = followup.get("desc", "")
+            if fid and fdesc:
+                lookup[fid] = fdesc
+    
+    # From STAGE1_EXTERNAL_SECTION (external)
+    ext = stage1_questions.get("external", {})
+    for item in ext.get("items", []):
+        qid = item.get("id", "")
+        desc = item.get("desc", "")
+        if qid and desc:
+            lookup[qid] = desc
+    
+    # From STAGE1_DYNAMIC_TEMPLATES (dynamic items like function names)
+    for tmpl in stage1_questions.get("dynamicTemplates", []):
+        template_str = tmpl.get("template", "")
+        desc_template = tmpl.get("desc", "")
+        # These are templates with {n} placeholders - we store the template pattern
+        if template_str and desc_template:
+            lookup[f"__template__{template_str}"] = desc_template
+    
+    return lookup
+
+
+def _get_question(lookup, key):
+    """
+    Get the question text for a given key ID, or return None if not found.
+    
+    First tries exact lookup. If that fails, checks if the key matches any
+    stored template patterns (e.g., __template__D1.4.2.{n} matches D1.4.2.1).
+    """
+    if not lookup:
+        return None
+    # Try exact match first
+    result = lookup.get(key)
+    if result is not None:
+        return result
+    # Try template pattern matching: replace the last dot-segment with {n}
+    # and check if a template key exists for it
+    for tmpl_key, desc in lookup.items():
+        if not tmpl_key.startswith("__template__"):
+            continue
+        template = tmpl_key[len("__template__"):]  # e.g., D1.4.2.{n}
+        # Convert template to regex pattern: replace {n} with \d+
+        import re as _re
+        pattern = _re.escape(template).replace(r"\{n\}", r"\d+")
+        if _re.fullmatch(pattern, key):
+            # Replace {n} in the desc with the actual number from the key
+            parts = key.rsplit(".", 1)
+            num = parts[-1] if parts else ""
+            return desc.replace("{n}", num) if desc else desc
+    return None
+
+
+def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export", stage1_questions=None):
     """
     Generate a PDF as bytes from pipeline stage data.
     
@@ -229,15 +384,15 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
     pdf.add_page()
 
     # ── Cover / Title page ──
-    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_font("DejaVu", "B", 24)
     pdf.set_text_color(30, 27, 58)
     pdf.ln(40)
     pdf.cell(0, 15, "Pipeline Author", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 14)
+    pdf.set_font("DejaVu", "", 14)
     pdf.set_text_color(99, 102, 241)
     pdf.cell(0, 10, "Full Pipeline Export", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(10)
-    pdf.set_font("Helvetica", "I", 10)
+    pdf.set_font("DejaVu", "I", 10)
     pdf.set_text_color(120, 120, 120)
     pdf.cell(0, 8, f"Generated: {title.replace('Pipeline Export - ', '')}", align="C", new_x="LMARGIN", new_y="NEXT")
     total_stages = len(pipeline_def)
@@ -253,7 +408,7 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         stage_name = stage.get("name", f"Stage {sid}")
 
         # Stage header
-        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_font("DejaVu", "B", 16)
         pdf.set_text_color(30, 27, 58)
         pdf.cell(0, 12, f"Stage {sid}: {stage_name}", new_x="LMARGIN", new_y="NEXT")
         pdf.set_draw_color(30, 27, 58)
@@ -262,15 +417,18 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
 
         # Stage type badge
         stage_type = stage.get("type", "")
-        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_font("DejaVu", "I", 8)
         pdf.set_text_color(120, 120, 120)
         pdf.cell(0, 6, f"Type: {stage_type}  |  Models: {', '.join(stage.get('models', []))}", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
+        # Build question lookup for Stage 1
+        question_lookup = _build_question_lookup(stage1_questions) if stage1_questions else None
+
         # ── Stage 1 PRD: detailed structured output ──
         if is_stage1:
-            s1 = _extract_stage1(sd, None)
-            _pdf_add_stage1_sections(pdf, s1)
+            s1 = _extract_stage1_full(sd)
+            _pdf_add_stage1_dynamic(pdf, s1, question_lookup=question_lookup)
         else:
             # ── Stages 2-9: standard manual + AI deliverables ──
             manual = stage.get("manualDeliverables", [])
@@ -287,7 +445,7 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
                     if val and val.strip():
                         _pdf_add_body(pdf, val)
                     else:
-                        pdf.set_font("Helvetica", "I", 8)
+                        pdf.set_font("DejaVu", "I", 8)
                         pdf.set_text_color(180, 180, 180)
                         pdf.cell(0, 6, "(Not provided)", new_x="LMARGIN", new_y="NEXT")
                         pdf.ln(2)
@@ -303,7 +461,7 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
                     if val and val.strip():
                         _pdf_add_body(pdf, val)
                     else:
-                        pdf.set_font("Helvetica", "I", 8)
+                        pdf.set_font("DejaVu", "I", 8)
                         pdf.set_text_color(180, 180, 180)
                         pdf.cell(0, 6, "(Not generated yet)", new_x="LMARGIN", new_y="NEXT")
                         pdf.ln(2)
@@ -324,9 +482,9 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
 
         # Completed status
         if sd.get("completed"):
-            pdf.set_font("Helvetica", "", 9)
+            pdf.set_font("DejaVu", "", 9)
             pdf.set_text_color(16, 185, 129)
-            pdf.cell(0, 6, "✓ Stage completed", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, "[Completed] Stage completed", new_x="LMARGIN", new_y="NEXT")
 
         pdf.ln(6)
 
@@ -338,90 +496,113 @@ def generate_pdf_bytes(stage_data, pipeline_def, title="Pipeline Export"):
     return pdf.output()
 
 
-def _pdf_add_stage1_sections(pdf, s1):
-    """Add Stage 1 PRD sections to the PDF."""
-    # ── Product Basics ──
-    _pdf_add_section_title(pdf, "📦 Product Basics")
-    _pdf_add_label_value(pdf, "Product Name", s1["productName"])
-    _pdf_add_label_value(pdf, "Business Purpose", s1["businessPurpose"])
-    _pdf_add_label_value(pdf, "New User Workflow", s1["newUserWorkflow"])
+def _group_stage1_by_section(inputs_tree):
+    """Group inputs tree items by section, returning (sections_dict, section_order_list)."""
+    sections = {}
+    for item in inputs_tree:
+        sec = item["section"]
+        if sec not in sections:
+            sections[sec] = []
+        sections[sec].append(item)
+    section_order = [s[1] for s in _STAGE1_SECTIONS] + ["📋 Other"]
+    return sections, section_order
 
-    # User types
-    _pdf_add_subsection(pdf, "User Types")
-    ut = s1["userTypes"]
-    _pdf_add_label_value(pdf, "Read-Only Users", "✅ Yes" if ut["readOnly"] else "❌ No")
-    if ut["readOnly"] and ut["readOnlyDesc"]:
-        _pdf_add_label_value(pdf, "  Description", ut["readOnlyDesc"])
-    _pdf_add_label_value(pdf, "Write-Only Users", "✅ Yes" if ut["writeOnly"] else "❌ No")
-    if ut["writeOnly"] and ut["writeOnlyDesc"]:
-        _pdf_add_label_value(pdf, "  Description", ut["writeOnlyDesc"])
-    _pdf_add_label_value(pdf, "Premium Users", "✅ Yes" if ut["premium"] else "❌ No")
-    if ut["premium"] and ut["premiumFeatures"]:
-        _pdf_add_label_value(pdf, "  Premium Features", ut["premiumFeatures"])
-    _pdf_add_label_value(pdf, "Premium Sub-Types", str(ut["premiumSubTypes"]))
-    _pdf_add_label_value(pdf, "Admin Page", "✅ Yes" if ut["adminPage"] else "❌ No")
-    _pdf_add_label_value(pdf, "Super-Admin Page", "✅ Yes" if ut["superAdminPage"] else "❌ No")
-    pdf.ln(2)
 
-    # GitHub
-    _pdf_add_section_title(pdf, "📁 Repository Setup")
-    _pdf_add_label_value(pdf, "GitHub Repository", "✅ Yes" if s1["github"] else "❌ No (Local only)")
-    pdf.ln(2)
-
-    # ── Infrastructure ──
-    _pdf_add_section_title(pdf, "🖥️ Infrastructure")
-    infra = s1["infrastructure"]
-    if infra:
-        for key, item in infra.items():
-            _pdf_add_subsection(pdf, item["label"])
-            for f_id, f_val in item["details"].items():
-                if f_val:
-                    _pdf_add_label_value(pdf, "", f_val)
-    else:
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(180, 180, 180)
-        pdf.cell(0, 6, "(No infrastructure items selected)", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-
-    # ── Functions ──
-    _pdf_add_section_title(pdf, "⚙️ Functions")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(60, 60, 60)
-    pdf.cell(0, 6, f"Total functions: {s1['functionCount']}", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
-    for fn in s1["functions"]:
-        _pdf_add_subsection(pdf, f"Function {fn['number']}: {fn['name']}")
-        pdf.set_x(15)
-        pdf.set_font("Helvetica", "B", 8)
-        pdf.set_text_color(60, 60, 60)
-        pdf.cell(30, 5, "Summary:", align="L")
-        pdf.set_font("Helvetica", "", 8)
-        pdf.set_text_color(20, 20, 20)
-        pdf.multi_cell(145, 5, fn["summary"] or "(Not provided)")
-        if fn.get("scope"):
-            pdf.set_x(15)
-            pdf.set_font("Helvetica", "B", 8)
-            pdf.set_text_color(60, 60, 60)
-            pdf.cell(30, 5, "Scope:", align="L")
-            pdf.set_font("Helvetica", "", 8)
-            pdf.set_text_color(20, 20, 20)
-            pdf.cell(0, 5, ", ".join(fn["scope"]), new_x="LMARGIN", new_y="NEXT")
+def _pdf_add_stage1_dynamic(pdf, s1, question_lookup=None):
+    """
+    Dynamically render all Stage 1 PRD inputs as a structured hierarchy.
+    
+    Groups inputs by section (from _STAGE1_SECTIONS), then renders each
+    key-value pair with indentation proportional to its depth in the
+    dot-notation hierarchy.
+    If question_lookup is provided, renders the question text alongside the key ID.
+    """
+    inputs_tree = s1.get("inputs_tree", [])
+    sections, section_order = _group_stage1_by_section(inputs_tree)
+    
+    seen_sections = set()
+    for sec_name in section_order:
+        if sec_name not in sections or sec_name in seen_sections:
+            continue
+        seen_sections.add(sec_name)
+        items = sections[sec_name]
+        
+        _pdf_add_section_title(pdf, sec_name)
+        for item in items:
+            indent = (item["depth"] - 1) * 5  # 5mm per depth level
+            key = item["key"]
+            val = item["value"]
+            
+            # Get question text if available
+            question = _get_question(question_lookup, key) if question_lookup else None
+            
+            # Build label: key ID + question text
+            label_prefix = "  " * (item["depth"] - 1) + key
+            if question:
+                label = f"{label_prefix} — {question}"
+            else:
+                label = label_prefix
+            
+            # For depth 1 items, use label-value layout
+            if item["depth"] <= 1:
+                pdf.set_x(10 + indent)
+                pdf.set_font("DejaVu", "B" if question else "", 9)
+                pdf.set_text_color(60, 60, 60)
+                pdf.multi_cell(180 - indent, 5, label)
+                pdf.set_x(10 + indent + 3)
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(20, 20, 20)
+                if val:
+                    for line in val.split("\n"):
+                        pdf.set_x(10 + indent + 3)
+                        pdf.multi_cell(170 - indent, 5, line)
+                else:
+                    pdf.cell(0, 5, "(No answer)")
+                pdf.ln(2)
+            else:
+                # For nested items, show as indented body text
+                pdf.set_x(10 + indent)
+                pdf.set_font("DejaVu", "", 8)
+                pdf.set_text_color(80, 80, 80)
+                pdf.multi_cell(180 - indent, 5, label)
+                # Value on next line with slightly more indent
+                pdf.set_x(10 + indent + 3)
+                pdf.set_font("DejaVu", "", 9)
+                pdf.set_text_color(20, 20, 20)
+                if val:
+                    for line in val.split("\n"):
+                        pdf.set_x(10 + indent + 3)
+                        pdf.multi_cell(170 - indent, 5, line)
+                pdf.ln(1)
         pdf.ln(2)
-
-    # ── External Linkages ──
-    _pdf_add_section_title(pdf, "🔗 External Linkages")
-    ext = s1["externalLinkages"]
-    _pdf_add_label_value(pdf, "Has External Products", "✅ Yes" if ext["hasExternal"] else "❌ No")
-    if ext.get("interfaces"):
-        _pdf_add_label_value(pdf, "Interfaces", ", ".join(ext["interfaces"]))
-    if ext.get("bffProducts"):
-        _pdf_add_label_value(pdf, "BFF Products", ", ".join(ext["bffProducts"]))
-    if ext.get("databaseProducts"):
-        _pdf_add_label_value(pdf, "Database Products", ", ".join(ext["databaseProducts"]))
-    if ext.get("inMemoryProducts"):
-        _pdf_add_label_value(pdf, "In-Memory Products", ", ".join(ext["inMemoryProducts"]))
-    pdf.ln(2)
-
+    
+    # ── Functions ──
+    if s1["functions"]:
+        _pdf_add_section_title(pdf, "⚙️ Functions")
+        pdf.set_font("DejaVu", "", 9)
+        pdf.set_text_color(60, 60, 60)
+        pdf.cell(0, 6, f"Total functions: {s1['functionCount']}", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+        for fn in s1["functions"]:
+            _pdf_add_subsection(pdf, f"Function {fn['number']}: {fn['name']}")
+            pdf.set_x(15)
+            pdf.set_font("DejaVu", "B", 8)
+            pdf.set_text_color(60, 60, 60)
+            pdf.cell(30, 5, "Summary:", align="L")
+            pdf.set_font("DejaVu", "", 8)
+            pdf.set_text_color(20, 20, 20)
+            pdf.multi_cell(145, 5, fn["summary"] or "(Not provided)")
+            if fn.get("scope"):
+                pdf.set_x(15)
+                pdf.set_font("DejaVu", "B", 8)
+                pdf.set_text_color(60, 60, 60)
+                pdf.cell(30, 5, "Scope:", align="L")
+                pdf.set_font("DejaVu", "", 8)
+                pdf.set_text_color(20, 20, 20)
+                pdf.cell(0, 5, ", ".join(fn["scope"]), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(2)
+        pdf.ln(2)
+    
     # ── D5 Auto-Checks ──
     if s1.get("d5Results"):
         _pdf_add_section_title(pdf, "🔍 Auto-Generated Checks (D5)")
@@ -499,72 +680,63 @@ def _docx_add_label(doc, label, value):
     run_value.font.size = Pt(10)
 
 
-def _docx_add_stage1(doc, s1):
-    """Add Stage 1 PRD content to the DOCX."""
-    _docx_add_section(doc, "Product Basics")
-    _docx_add_label(doc, "Product Name", s1["productName"])
-    _docx_add_label(doc, "Business Purpose", s1["businessPurpose"])
-    _docx_add_label(doc, "New User Workflow", s1["newUserWorkflow"])
-
-    _docx_add_subsection(doc, "User Types")
-    ut = s1["userTypes"]
-    _docx_add_label(doc, "Read-Only Users", "Yes" if ut["readOnly"] else "No")
-    if ut["readOnly"] and ut["readOnlyDesc"]:
-        _docx_add_label(doc, "  Description", ut["readOnlyDesc"])
-    _docx_add_label(doc, "Write-Only Users", "Yes" if ut["writeOnly"] else "No")
-    if ut["writeOnly"] and ut["writeOnlyDesc"]:
-        _docx_add_label(doc, "  Description", ut["writeOnlyDesc"])
-    _docx_add_label(doc, "Premium Users", "Yes" if ut["premium"] else "No")
-    if ut["premium"] and ut["premiumFeatures"]:
-        _docx_add_label(doc, "  Premium Features", ut["premiumFeatures"])
-    _docx_add_label(doc, "Premium Sub-Types", str(ut["premiumSubTypes"]))
-    _docx_add_label(doc, "Admin Page", "Yes" if ut["adminPage"] else "No")
-    _docx_add_label(doc, "Super-Admin Page", "Yes" if ut["superAdminPage"] else "No")
-
-    _docx_add_section(doc, "Repository Setup")
-    _docx_add_label(doc, "GitHub Repository", "Yes" if s1["github"] else "No (Local only)")
-
-    _docx_add_section(doc, "Infrastructure")
-    infra = s1["infrastructure"]
-    if infra:
-        for key, item in infra.items():
-            _docx_add_subsection(doc, item["label"])
-            for f_id, f_val in item["details"].items():
-                if f_val:
-                    _docx_add_body(doc, f_val)
-    else:
-        _docx_add_body(doc, "(No infrastructure items selected)")
-
-    _docx_add_section(doc, "Functions")
-    _docx_add_body(doc, f"Total functions: {s1['functionCount']}")
-    for fn in s1["functions"]:
-        _docx_add_subsection(doc, f"Function {fn['number']}: {fn['name']}")
-        _docx_add_label(doc, "Summary", fn["summary"] or "(Not provided)")
-        if fn.get("scope"):
-            _docx_add_label(doc, "Scope", ", ".join(fn["scope"]))
-
-    _docx_add_section(doc, "External Linkages")
-    ext = s1["externalLinkages"]
-    _docx_add_label(doc, "Has External Products", "Yes" if ext["hasExternal"] else "No")
-    if ext.get("interfaces"):
-        _docx_add_label(doc, "Interfaces", ", ".join(ext["interfaces"]))
-    if ext.get("bffProducts"):
-        _docx_add_label(doc, "BFF Products", ", ".join(ext["bffProducts"]))
-    if ext.get("databaseProducts"):
-        _docx_add_label(doc, "Database Products", ", ".join(ext["databaseProducts"]))
-    if ext.get("inMemoryProducts"):
-        _docx_add_label(doc, "In-Memory Products", ", ".join(ext["inMemoryProducts"]))
-
+def _docx_add_stage1_dynamic(doc, s1, question_lookup=None):
+    """
+    Dynamically render all Stage 1 PRD inputs as a structured hierarchy in DOCX.
+    
+    Groups inputs by section, renders each key-value pair with indentation
+    proportional to depth in the dot-notation hierarchy.
+    If question_lookup is provided, renders the question text alongside the key ID.
+    """
+    inputs_tree = s1.get("inputs_tree", [])
+    sections, section_order = _group_stage1_by_section(inputs_tree)
+    
+    seen_sections = set()
+    for sec_name in section_order:
+        if sec_name not in sections or sec_name in seen_sections:
+            continue
+        seen_sections.add(sec_name)
+        items = sections[sec_name]
+        
+        _docx_add_section(doc, sec_name)
+        for item in items:
+            key = item["key"]
+            val = item["value"]
+            
+            # Get question text if available
+            question = _get_question(question_lookup, key) if question_lookup else None
+            
+            # Build label: key ID + question text
+            indent_prefix = "  " * (item["depth"] - 1)
+            if question:
+                label = f"{indent_prefix}{key} — {question}"
+            else:
+                label = f"{indent_prefix}{key}"
+            
+            _docx_add_label(doc, label, val)
+    
+    # ── Functions ──
+    if s1["functions"]:
+        _docx_add_section(doc, "⚙️ Functions")
+        _docx_add_body(doc, f"Total functions: {s1['functionCount']}")
+        for fn in s1["functions"]:
+            _docx_add_subsection(doc, f"Function {fn['number']}: {fn['name']}")
+            _docx_add_label(doc, "Summary", fn["summary"] or "(Not provided)")
+            if fn.get("scope"):
+                _docx_add_label(doc, "Scope", ", ".join(fn["scope"]))
+    
+    # ── D5 Auto-Checks ──
     if s1.get("d5Results"):
-        _docx_add_section(doc, "Auto-Generated Checks (D5)")
+        _docx_add_section(doc, "🔍 Auto-Generated Checks (D5)")
         _docx_add_body(doc, s1["d5Results"])
 
+    # ── D4 Context Diagram ──
     if s1.get("d4ContextDiagram"):
-        _docx_add_section(doc, "C4 Context Diagram (D4)")
+        _docx_add_section(doc, "📐 C4 Context Diagram (D4)")
         _docx_add_body(doc, s1["d4ContextDiagram"])
 
 
-def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
+def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export", stage1_questions=None):
     """
     Generate a DOCX file as bytes from pipeline stage data.
     
@@ -614,6 +786,9 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         is_stage1 = stage.get("isStage1PRD", False)
         stage_name = stage.get("name", f"Stage {sid}")
 
+        # Build question lookup for Stage 1
+        question_lookup = _build_question_lookup(stage1_questions) if stage1_questions else None
+
         # Stage heading
         _docx_add_heading(doc, f"Stage {sid}: {stage_name}", level=1)
 
@@ -627,8 +802,8 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         run.font.color.rgb = RGBColor(120, 120, 120)
 
         if is_stage1:
-            s1 = _extract_stage1(sd, None)
-            _docx_add_stage1(doc, s1)
+            s1 = _extract_stage1_full(sd)
+            _docx_add_stage1_dynamic(doc, s1, question_lookup=question_lookup)
         else:
             manual = stage.get("manualDeliverables", [])
             ai = stage.get("aiDeliverables", [])
@@ -680,7 +855,7 @@ def generate_docx_bytes(stage_data, pipeline_def, title="Pipeline Export"):
         # Completed status
         if sd.get("completed"):
             p = doc.add_paragraph()
-            run = p.add_run("✓ Stage completed")
+            run = p.add_run("[COMPLETED] Stage completed")
             run.bold = True
             run.font.color.rgb = RGBColor(16, 185, 129)
 

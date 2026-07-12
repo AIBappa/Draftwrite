@@ -270,9 +270,10 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 data = self._read_body()
                 stage_data = data.get("stageData", {})
                 pipeline_def = data.get("pipelineDef", [])
+                stage1_q = data.get("stage1Questions", {})
                 timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
                 title = f"Pipeline Export - {timestamp}"
-                pdf_bytes = generate_pdf_bytes(stage_data, pipeline_def, title=title)
+                pdf_bytes = generate_pdf_bytes(stage_data, pipeline_def, title=title, stage1_questions=stage1_q)
                 filename = f"pipeline-export-{timestamp}.pdf"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
@@ -293,9 +294,10 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 data = self._read_body()
                 stage_data = data.get("stageData", {})
                 pipeline_def = data.get("pipelineDef", [])
+                stage1_q = data.get("stage1Questions", {})
                 timestamp = time.strftime("%Y-%m-%dT%H-%M-%S")
                 title = f"Pipeline Export - {timestamp}"
-                docx_bytes = generate_docx_bytes(stage_data, pipeline_def, title=title)
+                docx_bytes = generate_docx_bytes(stage_data, pipeline_def, title=title, stage1_questions=stage1_q)
                 filename = f"pipeline-export-{timestamp}.docx"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
@@ -417,7 +419,7 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 method=method,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=300) as resp:
                 response_body = resp.read()
                 self.send_response(resp.status)
                 self.send_header("Content-Type", "application/json")
@@ -430,11 +432,15 @@ class PipelineHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(response_body)
         except urllib.error.HTTPError as e:
-            self.send_error(e.code, str(e.reason))
+            try:
+                err_body = e.read().decode("utf-8", errors="replace")
+                self._send_json({"error": f"Ollama returned {e.code}: {err_body}"}, status=e.code)
+            except Exception:
+                self._send_json({"error": f"Ollama returned {e.code}: {e.reason}"}, status=e.code)
         except urllib.error.URLError as e:
-            self.send_error(502, f"Ollama connection failed: {e.reason}")
+            self._send_json({"error": f"Ollama connection failed: {e.reason}"}, status=502)
         except Exception as e:
-            self.send_error(500, f"Proxy error: {str(e)}")
+            self._send_json({"error": f"Proxy error: {str(e)}"}, status=500)
 
     def _proxy_nvidia(self):
         """Forward a request to NVIDIA NIM and return its response."""

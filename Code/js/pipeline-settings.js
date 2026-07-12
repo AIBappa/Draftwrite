@@ -5,6 +5,7 @@
 const CONFIG = {
   mode: 'cloud',
   ollamaUrl: 'http://localhost:11434',
+  ollamaModel: '',
   apiKey: '',
   cloudModel: 'claude-sonnet-4-6',
   openaiKey: '',
@@ -81,6 +82,27 @@ function showToast(msg) {
 function getStageModels(stage) {
   const sd = stageData[stage.id];
   return sd ? (sd.modelOverride || stage.models) : stage.models;
+}
+
+function getActiveModel() {
+  switch(CONFIG.mode) {
+    case 'local': return CONFIG.ollamaModel || 'default (per-stage)';
+    case 'cloud': return CONFIG.cloudModel;
+    case 'openai': return CONFIG.openaiModel;
+    case 'gemini': return CONFIG.geminiModel;
+    case 'azure': return CONFIG.azureModel;
+    case 'groq': return CONFIG.groqModel;
+    case 'cerebras': return CONFIG.cerebrasModel;
+    case 'openrouter': return CONFIG.openrouterModel;
+    case 'nvidia': return CONFIG.nvidiaModel;
+    case 'siliconflow': return CONFIG.siliconflowModel;
+    default: return '—';
+  }
+}
+
+function updateTopbarModel() {
+  const el = document.getElementById('topbar-models-text');
+  if (el) el.textContent = getActiveModel();
 }
 
 function stageModelsLabel(stage) {
@@ -169,13 +191,27 @@ function saveToStorage() {
       config: {
         mode: CONFIG.mode,
         ollamaUrl: CONFIG.ollamaUrl,
+        ollamaModel: CONFIG.ollamaModel,
+        apiKey: CONFIG.apiKey,
         cloudModel: CONFIG.cloudModel,
+        openaiKey: CONFIG.openaiKey,
         openaiModel: CONFIG.openaiModel,
+        geminiKey: CONFIG.geminiKey,
         geminiModel: CONFIG.geminiModel,
+        azureKey: CONFIG.azureKey,
         azureEndpoint: CONFIG.azureEndpoint,
         azureDeployment: CONFIG.azureDeployment,
         azureModel: CONFIG.azureModel,
+        groqKey: CONFIG.groqKey,
+        groqModel: CONFIG.groqModel,
+        cerebrasKey: CONFIG.cerebrasKey,
+        cerebrasModel: CONFIG.cerebrasModel,
+        openrouterKey: CONFIG.openrouterKey,
+        openrouterModel: CONFIG.openrouterModel,
+        nvidiaKey: CONFIG.nvidiaKey,
         nvidiaModel: CONFIG.nvidiaModel,
+        siliconflowKey: CONFIG.siliconflowKey,
+        siliconflowModel: CONFIG.siliconflowModel,
         // Advanced params
         localAdvanced: CONFIG.localAdvanced,
         cloudAdvanced: CONFIG.cloudAdvanced,
@@ -257,13 +293,27 @@ async function exportPipelineJSON() {
     config: {
       mode: CONFIG.mode,
       ollamaUrl: CONFIG.ollamaUrl,
+      ollamaModel: CONFIG.ollamaModel,
+      apiKey: CONFIG.apiKey,
       cloudModel: CONFIG.cloudModel,
+      openaiKey: CONFIG.openaiKey,
       openaiModel: CONFIG.openaiModel,
+      geminiKey: CONFIG.geminiKey,
       geminiModel: CONFIG.geminiModel,
+      azureKey: CONFIG.azureKey,
       azureEndpoint: CONFIG.azureEndpoint,
       azureDeployment: CONFIG.azureDeployment,
       azureModel: CONFIG.azureModel,
-      nvidiaModel: CONFIG.nvidiaModel
+      groqKey: CONFIG.groqKey,
+      groqModel: CONFIG.groqModel,
+      cerebrasKey: CONFIG.cerebrasKey,
+      cerebrasModel: CONFIG.cerebrasModel,
+      openrouterKey: CONFIG.openrouterKey,
+      openrouterModel: CONFIG.openrouterModel,
+      nvidiaKey: CONFIG.nvidiaKey,
+      nvidiaModel: CONFIG.nvidiaModel,
+      siliconflowKey: CONFIG.siliconflowKey,
+      siliconflowModel: CONFIG.siliconflowModel
     }
   };
   const fileName = 'pipeline-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json';
@@ -334,7 +384,14 @@ function buildExportPayload() {
 
   return {
     stageData: exportStageData,
-    pipelineDef: cleanPipeline
+    pipelineDef: cleanPipeline,
+    stage1Questions: {
+      deliverables: STAGE1_PRD_DELIVERABLES,
+      infrastructure: STAGE1_INFRASTRUCTURE_SECTION,
+      external: STAGE1_EXTERNAL_SECTION,
+      dynamicTemplates: STAGE1_DYNAMIC_TEMPLATES,
+      scopingOptions: SCOPING_OPTIONS
+    }
   };
 }
 
@@ -559,6 +616,7 @@ function openSetup() {
     'gemini-key-input': CONFIG.geminiKey,
     'azure-key-input': CONFIG.azureKey,
     'ollama-url': CONFIG.ollamaUrl,
+    'ollama-model-input': CONFIG.ollamaModel,
     'cloud-model-input': CONFIG.cloudModel,
     'openai-model-input': CONFIG.openaiModel,
     'gemini-model-input': CONFIG.geminiModel,
@@ -666,6 +724,7 @@ function closeSetup() {
 function saveSetup() {
   CONFIG.mode = activeSetupTab;
   CONFIG.ollamaUrl = (document.getElementById('ollama-url')?.value || '').trim().replace(/\/$/, '');
+  CONFIG.ollamaModel = (document.getElementById('ollama-model-input')?.value || '').trim();
   CONFIG.apiKey = (document.getElementById('api-key-input')?.value || '').trim();
   CONFIG.cloudModel = document.getElementById('cloud-model-input')?.value || CONFIG.cloudModel;
   CONFIG.openaiKey = (document.getElementById('openai-key-input')?.value || '').trim();
@@ -722,6 +781,7 @@ function saveSetup() {
 
   closeSetup();
   if (typeof updateSetupIndicator === 'function') updateSetupIndicator();
+  updateTopbarModel();
   saveToStorage();
   showToast(getProviderLabel() + ' mode active');
 }
@@ -765,6 +825,27 @@ function setConnectionStatus(provider, status, message) {
   }
   updateSetupIndicator();
   saveToStorage();
+}
+
+async function refreshOllamaModels() {
+  const url = (document.getElementById('ollama-url')?.value || '').trim().replace(/\/$/, '');
+  const datalist = document.getElementById('ollama-model-list');
+  if (!datalist) return;
+  try {
+    const r = await fetch(url + '/api/tags', { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const models = d.models || [];
+    datalist.innerHTML = '';
+    models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.name;
+      datalist.appendChild(opt);
+    });
+    showToast('🔄 Loaded ' + models.length + ' models from Ollama');
+  } catch(e) {
+    showToast('❌ Could not fetch models: ' + e.message);
+  }
 }
 
 async function testOllama() {
