@@ -6,6 +6,9 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
+# Ensure local bin is in PATH for builder stage too (prevents pip script warning)
+ENV PATH=/root/.local/bin:$PATH
+
 # Install build dependencies (none needed for pure-Python deps)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
