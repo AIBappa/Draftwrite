@@ -13,10 +13,13 @@ from ..llm import call_llm, get_stage_models
 from ..pipeline import PIPELINE
 from ..state import STATE
 from ..utils import show_toast, get_sd, get_stage
+from .stages import render_generic_stage
 
 
 def render_frs_pipeline():
     sd = get_sd()
+    render_generic_stage()
+
     if "frsData" not in sd or not sd["frsData"]:
         sd["frsData"] = {
             "documents": [],

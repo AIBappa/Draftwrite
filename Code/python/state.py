@@ -11,7 +11,7 @@ class PipelineState:
         self.current_stage: int = 1
         self.current_session_id: Optional[str] = None
         self.stage_data: dict = {}
-        self.view_mode: str = "wizard"  # "wizard" | "full"
+        self.view_mode: str = "full"  # "wizard" | "full"
         self.theme: str = "light"
         self.assist_open: bool = False
         self.history_open: bool = False
@@ -19,7 +19,7 @@ class PipelineState:
         # Stage 1 wizard state
         self.s1_flat_questions: list = []
         self.s1_current_question: int = 0
-        self.s1_view_mode: str = "wizard"
+        self.s1_view_mode: str = "full"
         # FRS state
         self.frs_active_doc_id: Optional[str] = None
         # Init stage data

@@ -29,7 +29,7 @@ def build_ui():
     app.add_static_files("/static", BASE_DIR / "static" if (BASE_DIR / "static").exists() else BASE_DIR)
 
     # ── Sidebar ──
-    with ui.left_drawer(bordered=True).classes("w-[280px] bg-indigo-950 text-white") as drawer:
+    with ui.left_drawer(value=True, bordered=True).classes("w-[280px] bg-indigo-950 text-white") as drawer:
         drawer.props("width=280")
         with ui.column().classes("w-full h-full"):
             # Header
@@ -237,10 +237,7 @@ def _rebuild_content():
     with content_container:
         stage = get_stage()
         if stage.get("isStage1PRD"):
-            if STATE.s1_view_mode == "full" or STATE.view_mode == "full":
-                render_stage1_full_view()
-            else:
-                render_stage1_prd()
+            render_stage1_full_view()
             return
 
         if stage.get("hasFrsSubPipeline"):

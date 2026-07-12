@@ -44,7 +44,8 @@ def render_generic_stage():
                 with ui.card().classes("w-full"):
                     ui.label(label).classes("text-sm font-medium")
                     val = sd.get("manualInputs", {}).get(did, "")
-                    ta = ui.textarea(value=val).props("outlined").classes("w-full").props(f'placeholder="{placeholder}"')
+                    safe_placeholder = placeholder.replace('"', '\\"').replace('\n', ' ')
+                    ta = ui.textarea(value=val).props("outlined").classes("w-full").props(f'placeholder="{safe_placeholder}"')
                     ta.on_value_change(lambda v, d_id=did: _save_manual_input(d_id, v))
 
     # AI deliverables
