@@ -251,6 +251,10 @@ def _go_to_stage(stage_id: int):
     """Navigate to a specific stage."""
     if stage_id < 1 or stage_id > len(PIPELINE):
         return
+    # Reset Stage 1 question list to ensure fresh load
+    if stage_id == 1:
+        STATE.s1_flat_questions = []
     STATE.current_stage = stage_id
     _rebuild_content()
+    ui.navigate.refresh()
     show_toast(f"Stage {stage_id}", "info")
