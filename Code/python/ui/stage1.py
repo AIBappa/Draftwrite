@@ -12,7 +12,6 @@ from ..llm import call_llm, get_stage_models
 from ..pipeline import PIPELINE, STAGE1_PRD_DELIVERABLES, STAGE1_INFRASTRUCTURE_SECTION, STAGE1_EXTERNAL_SECTION
 from ..state import STATE
 from ..utils import show_toast, get_sd
-from .shell import content_container
 from .stages import _save_manual_input, _save_qa_answer, _save_review_note, _set_review
 
 
@@ -671,6 +670,7 @@ def build_stage1_json() -> dict:
 
 def _rebuild_content():
     """Clear and rebuild the main content area based on current stage."""
+    from .shell import content_container
     content_container.clear()
     with content_container:
         stage = get_stage()
