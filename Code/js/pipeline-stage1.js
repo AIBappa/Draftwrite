@@ -495,14 +495,17 @@ function renderSingleQuestion() {
   const nav = document.getElementById('s1-nav');
   if (nav) {
     const canPrev = s1CurrentQuestion > 0;
-    const canNext = s1CurrentQuestion < s1FlatQuestions.length - 1;
+    const isLast = s1CurrentQuestion >= s1FlatQuestions.length - 1;
     nav.innerHTML = `
       <button class="btn s1-nav-btn" ${canPrev ? '' : 'disabled'} onclick="saveStage1Inputs(); s1CurrentQuestion--; renderSingleQuestion();">← Back</button>
       <div style="display:flex;align-items:center;gap:6px;">
         <input type="number" class="s1-nav-jump-input" id="s1-jump-input" value="${s1CurrentQuestion + 1}" min="1" max="${s1FlatQuestions.length}" placeholder="#" />
         <button class="btn s1-nav-jump-btn" onclick="s1JumpToQuestion()">Go</button>
       </div>
-      <button class="btn btn-primary s1-nav-btn" ${canNext ? '' : 'disabled'} onclick="saveStage1Inputs(); s1CurrentQuestion++; buildS1FlowContext(); s1FlatQuestions = buildFlatQuestionList(); renderSingleQuestion();">Forward →</button>
+      ${isLast
+        ? `<button class="btn btn-primary s1-nav-btn" onclick="saveStage1Inputs(); s1FinishToD5();">Finish → D5 Checks</button>`
+        : `<button class="btn btn-primary s1-nav-btn" onclick="saveStage1Inputs(); s1CurrentQuestion++; buildS1FlowContext(); s1FlatQuestions = buildFlatQuestionList(); renderSingleQuestion();">Forward →</button>`
+      }
     `;
     // Add Enter key support
     const jumpInput = document.getElementById('s1-jump-input');
@@ -539,6 +542,30 @@ function s1JumpToQuestion() {
   
   saveStage1Inputs();
   renderSingleQuestion();
+}
+
+/** From the last wizard question, switch to Full view and open/scroll to the D5 Checks accordion */
+function s1FinishToD5() {
+  s1ViewMode = 'full';
+  globalViewMode = 'full';
+  updateViewModeButton();
+  renderStage();
+  // After Full view renders, open the D5 accordion and scroll it into view
+  const d5 = document.getElementById('s1-d5-accordion');
+  if (d5) {
+    const body = d5.querySelector('.s1-accordion-body');
+    const header = d5.querySelector('.s1-accordion-header');
+    if (body && body.style.display !== 'block') {
+      body.style.display = 'block';
+      if (header) {
+        header.classList.add('open');
+        const toggle = header.querySelector('.s1-accordion-toggle');
+        if (toggle) toggle.textContent = '▼';
+      }
+    }
+    d5.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  showToast('Switched to Full View — scroll to D5 checks below');
 }
 
 /** Render functions wizard step with dynamic sub-sections */
@@ -965,6 +992,7 @@ function renderD5Section(container) {
   const sd = stageData[1];
   const accordion = document.createElement('div');
   accordion.className = 's1-accordion';
+  accordion.id = 's1-d5-accordion';
   const hasResults = sd.d5Results !== null;
   accordion.innerHTML = `
     <div class="s1-accordion-header" onclick="toggleAccordion(this)">
