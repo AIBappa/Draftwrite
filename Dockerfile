@@ -29,8 +29,9 @@ ENV PATH=/root/.local/bin:$PATH \
 WORKDIR /app
 
 # Copy application code
-COPY main.py .
+COPY requirements.txt .
 COPY Code/python/ ./Code/python/
+COPY launcher.py .
 COPY sessions/ ./sessions/ 2>/dev/null || true
 
 # Create sessions directory if it doesn't exist
@@ -44,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["python", "launcher.py"]
