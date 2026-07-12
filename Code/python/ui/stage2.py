@@ -13,7 +13,6 @@ from ..llm import call_llm, get_stage_models
 from ..pipeline import PIPELINE
 from ..state import STATE
 from ..utils import show_toast, get_sd, get_stage
-from .shell import content_container
 
 
 def render_frs_pipeline():
@@ -76,6 +75,8 @@ def render_frs_pipeline():
 
 
 def _frs_go_to_phase(phase: int):
+    from .shell import content_container
+
     sd = get_sd()
     fd = sd.get("frsData", {})
     doc = fd.get("activeDocId") and next((d for d in fd["documents"] if d["id"] == fd["activeDocId"]), None)
@@ -154,6 +155,7 @@ async def _frs_run_phase2():
         doc["version"]["r"] = "R_0"
         fd["activePhase"] = 2
         show_toast(f"{len(points)} points identified ✓", "positive")
+        from .shell import content_container
         content_container.clear()
         with content_container:
             render_frs_pipeline()
@@ -220,6 +222,7 @@ async def _frs_run_phase3():
         doc["version"]["r"] = "R_1.0"
         fd["activePhase"] = 3
         show_toast("AI review complete ✓", "positive")
+        from .shell import content_container
         content_container.clear()
         with content_container:
             render_frs_pipeline()
@@ -337,6 +340,8 @@ def _frs_cmp_versions(a: str, b: str) -> int:
 
 
 def _frs_set_decision(point_id: str, decision: str):
+    from .shell import content_container
+
     sd = get_sd()
     fd = sd.get("frsData", {})
     doc = fd.get("activeDocId") and next((d for d in fd["documents"] if d["id"] == fd["activeDocId"]), None)
@@ -365,6 +370,8 @@ def _frs_set_rejection(point_id: str, value: str):
 
 
 async def _frs_handle_submit():
+    from .shell import content_container
+
     sd = get_sd()
     fd = sd.get("frsData", {})
     doc = fd.get("activeDocId") and next((d for d in fd["documents"] if d["id"] == fd["activeDocId"]), None)
