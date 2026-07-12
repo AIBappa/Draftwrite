@@ -38,40 +38,23 @@ A local desktop tool for authoring software requirements using LLMs. Supports lo
 
     Also note: https://freellm.net/providers/ - this contains list of free LLM providers.
 
-### Option 2: Run Locally with Docker
+### Option 2: Run Locally with Docker Compose
 
-Build and run the Docker image on your local machine:
+Start the app using Docker Compose:
 
-1. **Build the image**:
+1. **Start the app**:
     ```
-    docker build -t pipeline-author .
-    ```
-
-2. **Run the container**:
-    ```
-    docker run -p 8080:8080 \
-      -v $(pwd)/sessions:/app/sessions \
-      -v $(pwd)/saved_exports:/app/exports \
-      -v $(pwd)/keys:/app/keys \
-      pipeline-author
-    ```
-    On Windows PowerShell:
-    ```
-    docker run -p 8080:8080 `
-      -v "${PWD}/sessions:/app/sessions" `
-      -v "${PWD}/saved_exports:/app/exports" `
-      -v "${PWD}/keys:/app/keys" `
-      pipeline-author
+    docker-compose up
     ```
 
-3. **Open the app**:
+2. **Open the app**:
     ```
     http://localhost:8080/
     ```
 
-The `-v` flags mount persistent directories so your data survives container restarts:
+Docker Compose automatically configures persistent volumes for your data:
 - `sessions/` — pipeline session JSON files and `config.json`
-- `saved_exports/` — mounted to `/app/exports` inside the container; stores JSON/CSV exports from the pipeline
+- `saved_exports/` — stores JSON/CSV exports from the pipeline
 - `keys/` — API key files and optional `model_names.json` for auto-loading provider settings on startup
 
 ### Option 3: Access from Phone via Cloudflare Tunnel
@@ -89,16 +72,12 @@ The `-v` flags mount persistent directories so your data survives container rest
 
 ### Option 4: Deploy on Coolify / Hetzner
 
-A `Dockerfile` is included in the root for easy deployment.
+A `Dockerfile` and `docker-compose.yml` are included in the root for easy deployment.
 
 1. Push this repository to GitHub
 2. In Coolify, create a new project and point it to your GitHub repo
-3. Select "Dockerfile" as the build type (build path: repository root)
-4. In Coolify, add persistent storage for:
-   - `/app/sessions`
-   - `/app/exports`
-   - `/app/keys`
-5. Coolify will build and serve the app with HTTPS on port 8080
+3. Select "Docker Compose" as the build type (build path: repository root)
+4. Coolify will read `docker-compose.yml`, create volumes, build the image, and serve the app with HTTPS on port 8080
 
 **Note:** The application is a self-contained NiceGUI app. All Python code lives under `Code/python/` and is launched via `launcher.py`.
 
