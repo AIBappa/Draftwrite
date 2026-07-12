@@ -6,6 +6,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent.parent.resolve()
 CONFIG_FILE = BASE_DIR / "sessions" / "config.json"
+KEYS_DIR = BASE_DIR / "keys"
 
 
 class AppConfig:
@@ -89,6 +90,57 @@ class AppConfig:
     def to_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
+    def save_keys_to_disk(self):
+        """Persist keys and model names into individual files under keys/."""
+        try:
+            KEYS_DIR.mkdir(parents=True, exist_ok=True)
+            mapping = {
+                "anthropic": ("api_key", "cloud_model"),
+                "openai": ("openai_key", "openai_model"),
+                "gemini": ("gemini_key", "gemini_model"),
+                "azure": ("azure_key", "azure_model"),
+                "groq": ("groq_key", "groq_model"),
+                "cerebras": ("cerebras_key", "cerebras_model"),
+                "openrouter": ("openrouter_key", "openrouter_model"),
+                "nvidia": ("nvidia_key", "nvidia_model"),
+                "siliconflow": ("siliconflow_key", "siliconflow_model"),
+            }
+            for name, (key_attr, model_attr) in mapping.items():
+                data = {
+                    "key": getattr(self, key_attr, ""),
+                    "model": getattr(self, model_attr, ""),
+                }
+                (KEYS_DIR / f"{name}.json").write_text(json.dumps(data, indent=2), "utf-8")
+        except OSError:
+            pass
+
+    @classmethod
+    def load_keys_from_disk(cls):
+        """Load keys and model names from individual files under keys/, if present."""
+        if not KEYS_DIR.exists():
+            return
+        mapping = {
+            "anthropic": ("api_key", "cloud_model"),
+            "openai": ("openai_key", "openai_model"),
+            "gemini": ("gemini_key", "gemini_model"),
+            "azure": ("azure_key", "azure_model"),
+            "groq": ("groq_key", "groq_model"),
+            "cerebras": ("cerebras_key", "cerebras_model"),
+            "openrouter": ("openrouter_key", "openrouter_model"),
+            "nvidia": ("nvidia_key", "nvidia_model"),
+            "siliconflow": ("siliconflow_key", "siliconflow_model"),
+        }
+        cfg = CONFIG
+        for name, (key_attr, model_attr) in mapping.items():
+            try:
+                data = json.loads((KEYS_DIR / f"{name}.json").read_text("utf-8"))
+                if data.get("key"):
+                    setattr(cfg, key_attr, data["key"])
+                if data.get("model"):
+                    setattr(cfg, model_attr, data["model"])
+            except (OSError, json.JSONDecodeError):
+                continue
+
     @classmethod
     def from_dict(cls, d: dict):
         cfg = cls()
@@ -103,6 +155,9 @@ CONNECTION_STATUS = {p: {"status": "untested", "message": "Not tested yet"}
                      for p in ["local", "cloud", "openai", "gemini", "azure", "groq",
                                "cerebras", "openrouter", "nvidia", "siliconflow"]}
 
+# Auto-load provider keys/models from keys/ if available
+AppConfig.load_keys_from_disk()
+
 
 def load_server_config() -> dict:
     if CONFIG_FILE.exists():
@@ -115,3 +170,7 @@ def load_server_config() -> dict:
 
 def save_server_config(cfg: dict):
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2), "utf-8")
+    try:
+        CONFIG.save_keys_to_disk()
+    except Exception:
+        pass
