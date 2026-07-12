@@ -32,6 +32,8 @@ def main():
     print(f"\u2757 NICEGUI_RELOAD=false (production mode)")
     print()
 
+    build_ui()
+
     ui.run(
         host="0.0.0.0",
         port=8080,

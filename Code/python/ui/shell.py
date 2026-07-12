@@ -6,17 +6,25 @@ from nicegui import ui, app
 from ..config import BASE_DIR, CONFIG
 from ..pipeline import PIPELINE
 from ..state import STATE
-from ..utils import show_toast, update_progress
+from ..utils import show_toast, update_progress, get_stage
+from ..exporters import export_pipeline_json
 from .stage1 import render_stage1_prd, render_stage1_full_view
 from .stage2 import render_frs_pipeline
 from .stages import render_generic_stage
+from .components import (
+    _test_ollama, _test_anthropic, _test_openai, _test_gemini,
+    _test_azure, _test_groq, _test_cerebras, _test_openrouter,
+    _test_nvidia, _test_siliconflow,
+)
 
 
-content_container = ui.column().classes("w-full")
+content_container = None
 
 
 def build_ui():
     """Build the complete UI shell."""
+    global content_container
+
     # ── Dark mode support ──
     app.add_static_files("/static", BASE_DIR / "static" if (BASE_DIR / "static").exists() else BASE_DIR)
 
@@ -83,7 +91,9 @@ def build_ui():
 
         # Scrollable content area
         with ui.scroll_area().classes("flex-1 w-full p-6"):
-            _rebuild_content()
+            content_container = ui.column().classes("w-full")
+            with content_container:
+                _rebuild_content()
 
     # ── Setup dialog ──
     with ui.dialog().props("maximized") as setup_dialog:
@@ -99,12 +109,13 @@ def build_ui():
                     ("cerebras", "🟧 Cerebras"), ("openrouter", "🟡 OpenRouter"),
                     ("nvidia", "🟢 NVIDIA NIM"), ("siliconflow", "🧱 SiliconFlow"),
                 ]
-                tabs = ui.tabs().classes("w-full")
-                tab_panels = ui.tab_panels(tabs, value="local").classes("w-full")
-                for pkey, plabel in providers:
-                    tab = ui.tab(pkey, label=plabel)
-                    with tab_panels.add(tab_panel := ui.tab_panel(pkey)):
-                        _render_setup_tab(pkey, tab_panel)
+                with ui.tabs().classes("w-full") as tabs:
+                    for pkey, plabel in providers:
+                        ui.tab(pkey, label=plabel)
+                with ui.tab_panels(tabs, value="local").classes("w-full"):
+                    for pkey, _ in providers:
+                        with ui.tab_panel(pkey):
+                            _render_setup_tab(pkey, ui.column())
                 with ui.row().classes("w-full justify-end gap-2 pt-4"):
                     ui.button("Cancel", on_click=lambda: setup_dialog.close()).props("flat")
                     ui.button("Save & Close", on_click=lambda: _save_setup(setup_dialog)).props("color=primary")
@@ -118,7 +129,7 @@ def build_ui():
                 _render_sessions_list(session_dialog)
 
     # ── History panel (slide-in) ──
-    STATE.history_panel = ui.slide_panel().props("right width=380")
+    STATE.history_panel = ui.card().classes("hidden")
 
 
 def _render_setup_tab(provider: str, panel):
@@ -220,11 +231,29 @@ def _render_sessions_list(dialog):
         ui.label("Session browser coming soon").classes("text-sm text-gray-500")
 
 
+def _rebuild_content():
+    """Clear and rebuild the main content area based on the current stage."""
+    content_container.clear()
+    with content_container:
+        stage = get_stage()
+        if stage.get("isStage1PRD"):
+            if STATE.s1_view_mode == "full" or STATE.view_mode == "full":
+                render_stage1_full_view()
+            else:
+                render_stage1_prd()
+            return
+
+        if stage.get("hasFrsSubPipeline"):
+            render_frs_pipeline()
+            return
+
+        render_generic_stage()
+
+
 def _go_to_stage(stage_id: int):
     """Navigate to a specific stage."""
     if stage_id < 1 or stage_id > len(PIPELINE):
         return
     STATE.current_stage = stage_id
-    # Reset FRS phase if needed
     _rebuild_content()
     show_toast(f"Stage {stage_id}", "info")
