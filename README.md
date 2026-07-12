@@ -94,7 +94,11 @@ A `Dockerfile` is included in the root for easy deployment.
 1. Push this repository to GitHub
 2. In Coolify, create a new project and point it to your GitHub repo
 3. Select "Dockerfile" as the build type (build path: repository root)
-4. Coolify will build and serve the app with HTTPS on port 8080
+4. In Coolify, add persistent storage for:
+   - `/app/sessions`
+   - `/app/exports`
+   - `/app/keys`
+5. Coolify will build and serve the app with HTTPS on port 8080
 
 **Note:** The application is a self-contained NiceGUI app. All Python code lives under `Code/python/` and is launched via `launcher.py`.
 

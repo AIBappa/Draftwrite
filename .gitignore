@@ -12,15 +12,16 @@ Thumbs.db
 *.swp
 *.swo
 
-# Sessions folder
-sessions/
+# Ignore runtime data contents, but keep empty folders via .gitkeep
+sessions/*
+exports/*
+saved_exports/*
+keys/*
+Code/sessions/*
+Code/saved_exports/*
 
-# Exports folder
-exports/
-saved_exports/
-
-# Keys folder
-keys/
+# Allow .gitkeep files to be tracked
+!.gitkeep
 
 #Agentic scripts folder
 /Code/AI_scripts/
